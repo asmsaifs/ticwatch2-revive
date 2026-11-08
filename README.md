@@ -284,7 +284,19 @@ Steps:
    adb push Ticwatch2-i18n-beta-Tic_4.13.0_intl_a1-1505989793818.zip /sdcard/update.zip
    adb shell md5 /sdcard/update.zip      # compare with: md5sum Ticwatch2-i18n-beta-Tic_4.13.0_intl_a1-1505989793818.zip  (macOS: md5 -q)
    ```
-4. Tell recovery to install it, then reboot into recovery (needs `adb root`, i.e. a `userdebug` ROM is already running):
+4. Start the installation — **pick one** of the two ways:
+
+   **Option A — on the watch (no root needed).** With the zip in `/sdcard/update.zip` from step 3:
+
+   1. On the watch open **Settings → Developer info** and tap **Install manually**.
+   2. Wait while the watch processes the package and installs it. It may restart and the screen can go black for a
+      while — that is normal. **Do not touch the watch or take it off the charger** until it is back.
+
+   If nothing happens, check that the *System Update* app is not disabled
+   (`adb shell pm enable com.mobvoi.ticwear.systemupdate` turns it back on).
+
+   **Option B — with adb (needs `adb root`, i.e. a `userdebug` ROM is already running).** Tell recovery to install the
+   package and reboot into it:
 
    ```bash
    adb root
@@ -292,16 +304,16 @@ Steps:
    adb reboot recovery
    ```
 
-   Recovery installs the package (a few minutes, black/progress screen), formats `/data`, and the watch reboots.
-   The first boot is slow.
+   Either way, recovery then installs the package (a few minutes, progress/black screen), formats `/data`, and the
+   watch reboots. The first boot is slow.
 5. Re-enable ADB debugging, then run [`install-watch`](#the-watch-installer) to put the apps back.
 
 Good to know:
 
 * The stock recovery only accepts packages **signed by Mobvoi**. Re-packed or re-signed ROMs are rejected —
   and replacing the recovery to get around that is risky. Use the original zip.
-* If you are on firmware without `adb root` (for example the Chinese 4.15 builds) you need another way to start the
-  update; the file you copy to `/sdcard/update.zip` is the same.
+* Option B needs `adb root`; on firmware without it (for example the Chinese 4.15 builds) use Option A. The file you
+  copy to `/sdcard/update.zip` is the same either way.
 * After flashing, `/data` is empty: pair the phone again, grant the per-app permissions again, and re-run the installer
   (which also re-applies the system-app changes).
 
