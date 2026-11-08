@@ -1,0 +1,5 @@
+# package	enabled-by-default	why
+# The watch installer runs 'pm disable' on every line marked yes. Reversible: ./install-watch.sh --restore
+# Lines starting with # are ignored. Add your own packages here (find them with: adb shell pm list packages).
+com.mediatek.mtklogger	yes	MediaTek logger: on this ROM it fills /sdcard/mtklog (hundreds of MB) until storage is full
+com.mobvoi.ticwear.mtklog	yes	Mobvoi 'TicLog' front-end for the same MediaTek logging

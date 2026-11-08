@@ -1,0 +1,401 @@
+# ticwatch2-revive
+
+**Bring the Mobvoi Ticwatch 2 back to life.**
+
+The Ticwatch 2 (2016, Android 5.1 / *Ticwear 2*, MediaTek MT2601, 400×400 round screen, 512 MB RAM) is a nice
+little watch with GPS, heart-rate sensor, speaker and microphone, but it was abandoned years ago:
+
+* the stock voice assistant and app store depend on cloud services that are gone or unreliable,
+* Android 5.1 is too old for Google Play services, most apps from the last decade, and — since
+  its trust store stops at 2015 — for a growing number of HTTPS sites,
+* the original phone companion app is so old that current Android versions refuse to install it,
+* the firmware logs so aggressively that it fills the watch's storage.
+
+This repository collects what is needed to make the watch useful again:
+
+| Part | What it is |
+|---|---|
+| **Xiaozhi** (watch app) | A voice-assistant client for the open *Xiaozhi* AI service — talk to the watch, it talks back |
+| **Maps** (watch app) | OpenStreetMap / Google maps with search, routing and turn-by-turn navigation, built for a round 400×400 screen |
+| **Ticwear companion** (phone app, patched) | Mobvoi's phone companion rebuilt so it installs and runs on **Android 14–16** — pairs the phone with the watch, syncs apps and gives the watch internet over Bluetooth |
+| **Mobvoi Store** (phone app, patched) | The old Ticwear app store, patched so installing from it works on current Android |
+| **Install on Watch** (phone app) | Installs old, low-target-SDK `.apk` files on a modern Android phone and helps get Wear apps to the watch |
+| **`install-watch`** | One script (macOS · Linux · Windows) that installs/updates the watch apps and switches off the log-filling system apps |
+| **`install-phone`** | Same idea for the phone app |
+| **Flashing guide** | How to put the old, known-good ROM back on the watch |
+
+> **Not affiliated with** Mobvoi, Xiaozhi, Google, OpenStreetMap or Cactus Compute. Everything here is a
+> hobby project, provided as is. See [Disclaimer](#disclaimer).
+
+---
+
+## Contents
+
+1. [Quick start](#quick-start)
+2. [What you need](#what-you-need)
+3. [Connect the watch](#connect-the-watch)
+4. [The watch installer](#the-watch-installer)
+5. [The phone installer](#the-phone-installer)
+6. [The apps](#the-apps)
+7. [Flash the old ROM](#flash-the-old-rom)
+8. [How updates work](#how-updates-work-and-how-to-publish-one)
+9. [Troubleshooting](#troubleshooting)
+10. [Repository layout](#repository-layout)
+11. [Credits, licences, disclaimer](#credits-licences-disclaimer)
+
+---
+
+## Quick start
+
+```bash
+git clone https://github.com/YOUR_GITHUB_USERNAME/ticwatch2-revive.git
+cd ticwatch2-revive
+```
+
+Connect the watch (see [Connect the watch](#connect-the-watch)), then run **one** of:
+
+| OS | Watch apps | Phone app |
+|---|---|---|
+| macOS / Linux | `./install-watch.sh` | `./install-phone.sh` |
+| Windows | double-click `install-watch.bat` | double-click `install-phone.bat` |
+
+That's all. Run it again whenever you like (after a factory reset, or when new versions were published here):
+apps that are already up to date are skipped.
+
+No `git`? Use **Code → Download ZIP** on GitHub, unzip, and run the same scripts — they fetch newer files from
+the repository on their own.
+
+---
+
+## What you need
+
+* A Ticwatch 2 (codename *mercury*). Written for the international ROM **Tic_4.13.0_intl**
+  (Android 5.1, `userdebug` build); other Ticwear 2 builds probably work but are untested.
+* A computer with **macOS, Linux or Windows 10/11**. The scripts need nothing but a terminal / PowerShell; if
+  Android's `adb` tool is missing they offer to download Google's official *platform-tools* for you.
+* For the phone installer: an Android phone with **USB debugging** (or *Wireless debugging*) enabled.
+* Optional, per feature: a Google Maps API key (better maps/search/routing), an account on the Xiaozhi service.
+
+---
+
+## Connect the watch
+
+The watch has no USB data port (only charging contacts), so adb works **over Wi-Fi**.
+
+1. On the watch: **Settings → About →** tap **Build number** seven times to unlock *Developer options*.
+2. **Settings → Developer options →** switch on **ADB debugging** and **Debug over Wi-Fi** (wording may vary).
+   The screen shows an address like `192.168.1.50:5555`.
+3. Put the watch **on its charger** and keep the screen awake — a sleeping watch drops the Wi-Fi link.
+4. Run the installer. It looks for the watch itself; if it cannot find it, it asks for that address
+   (or pass it: `./install-watch.sh --addr 192.168.1.50:5555`).
+
+If you flashed the `userdebug` ROM described [below](#flash-the-old-rom), adb needs no authorisation prompt and
+`adb root` works.
+
+---
+
+## The watch installer
+
+```text
+./install-watch.sh [options]            (Windows: install-watch.bat [options])
+
+  --addr IP:PORT   connect to the watch over Wi-Fi first
+  --no-disable     only install/update apps, leave system apps alone
+  --restore        undo: re-enable the system apps this script disabled
+  --force          replace an app that was installed with a different signing key (erases its data)
+  --offline        do not look for newer files online
+  --yes            answer "yes" to prompts (e.g. downloading platform-tools)
+  --dry-run        show what would happen, change nothing
+```
+
+What it does, in order:
+
+1. **Looks for newer versions** — `git pull` if this folder is a clone, otherwise it downloads the changed files from
+   this repository (see [How updates work](#how-updates-work-and-how-to-publish-one)).
+2. **Finds `adb`** (offers to download platform-tools if it is missing).
+3. **Finds the watch** among the connected devices (it recognises it by the product name `mercury`).
+4. **Installs or updates each watch app** in [`manifest.tsv`](manifest.tsv). It compares the checksum of the APK
+   *on the watch* with the one in the repository, so unchanged apps are skipped and any new build is installed.
+   User data is kept (`adb install -r`).
+5. **Disables unneeded system apps** listed in [`system-apps.tsv`](system-apps.tsv), using `pm disable`
+   (reversible, nothing is deleted). Currently:
+
+   | Package | Why |
+   |---|---|
+   | `com.mediatek.mtklogger` | MediaTek logger — on this ROM it fills `/sdcard/mtklog` with hundreds of MB until storage is full |
+   | `com.mobvoi.ticwear.mtklog` | Mobvoi's "TicLog" front-end for the same logging |
+
+   Disabled state lives in the watch's data partition, so **a factory reset brings these apps back — just run the
+   installer again.** Edit `system-apps.tsv` to add or remove packages
+   (`adb shell pm list packages` lists what is installed). Undo everything with `--restore`.
+
+Examples:
+
+```bash
+./install-watch.sh --addr 192.168.1.50:5555      # first run over Wi-Fi
+./install-watch.sh --dry-run                     # see what it would do
+./install-watch.sh --no-disable                  # apps only
+./install-watch.sh --restore                     # re-enable the system apps
+```
+
+On Windows the same options work (`install-watch.bat --addr 192.168.1.50:5555`).
+If PowerShell refuses to run scripts, the `.bat` launcher already passes `-ExecutionPolicy Bypass` for that one run.
+
+After the **first** install, on the watch:
+
+* Ticwear asks per app for permissions — allow **Microphone** for Xiaozhi and Maps (and Internet if asked).
+* Maps: optionally set a Google key ([Maps](#maps--navigation-for-the-round-screen)). Xiaozhi: open it once, it shows a pairing code.
+
+---
+
+## The phone installer
+
+```text
+./install-phone.sh [options]            (Windows: install-phone.bat [options])
+
+  --serial ID            pick a device when several are attached (see: adb devices)
+  --pair HOST:PORT CODE  pair over Wireless debugging first (Android 11+): the pairing address + 6-digit code
+  --connect HOST:PORT    connect over Wireless debugging (the main address, not the pairing one)
+  --force / --offline / --yes / --dry-run    as above
+```
+
+1. On the phone: **Settings → About phone →** tap *Build number* 7× → **Developer options →**
+   enable **USB debugging** (or **Wireless debugging**).
+2. Plug the phone in and accept the "Allow USB debugging?" prompt (or use `--pair` / `--connect`).
+3. Run `./install-phone.sh`.
+
+It installs/updates the three phone apps — **Ticwear companion**, **Mobvoi Store** and **Install on Watch** (the same
+up-to-date check as above) — and grants *Install on Watch* the permissions it needs (notifications, Bluetooth,
+all-files access) where Android allows that from adb. The companion and the store ask for their own permissions
+the first time you open them.
+
+**Already have the original companion on the phone?** The patched apps are signed with a different key than
+Mobvoi's, so Android refuses to update over the originals (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Re-run with
+`--force` to uninstall the original first (this erases its data, i.e. the existing pairing).
+**A watch that was paired with another companion has to be factory-reset before it pairs with this one** — that
+is how Ticwear works, not something these builds change.
+
+The phone and the watch are told apart automatically, so both can be plugged in at the same time.
+
+---
+
+## The apps
+
+### Xiaozhi — voice assistant for the watch
+
+`org.xzwatch` · watch app · talks to the open **Xiaozhi** AI voice service ([xiaozhi.me](https://xiaozhi.me)).
+
+* Press the orb (or hold it — switchable in settings) and talk; replies are spoken back.
+* *Auto* mode keeps the conversation going hands-free; *manual* mode is push-to-talk.
+* Audio is Opus-encoded on the watch (pure-Java encoder, no native code), streamed over a WebSocket.
+* Built for the round screen: a state-coloured animated orb (idle / listening / thinking / speaking) and a transcript
+  that **scrolls and shrinks** so long sentences stay readable.
+* Works over the watch's Wi-Fi, or — when Wi-Fi is off — through the phone's internet via the Ticwear companion.
+* First start shows a pairing code: enter it in your Xiaozhi account to activate the device.
+  The service URL can be changed in the app's settings.
+
+### Maps — navigation for the round screen
+
+`org.xzwatch.maps` · watch app
+
+* **Maps:** OpenStreetMap out of the box; with your own Google key also Google *Map* and *Satellite* layers.
+* **Search:** by keyboard, or by **voice** with a built-in, fully **offline** speech recogniser
+  (Cactus *Whistle*, 17 MB, English/German/French/Spanish/Italian/Dutch/Polish — place names are best said in English).
+  Search uses Google Places when a key is set, OpenStreetMap Nominatim otherwise.
+* **Routing:** walk, bike and drive. Google Routes API when a key is set, otherwise the free
+  [BRouter](https://brouter.de) service (OpenStreetMap data, no key).
+* **Turn-by-turn navigation:** big turn arrow and distance, vibration patterns for "prepare" and "turn now",
+  automatic re-routing, screen wake on each alert.
+* Saved and recent places, long-press to drop a pin.
+* Location comes from the watch's own GPS through the Ticwear location service.
+
+**Google key (optional).** Create an API key in Google Cloud (Google requires a billing account; there is a monthly free
+tier — set a budget alert), enable *Map Tiles API*, *Places API (New)* and *Routes API*, and send the key to the
+watch with adb — there is no text field for it on the watch:
+
+```bash
+adb shell am start -n org.xzwatch.maps/.MapActivity --es google_key YOUR_KEY
+```
+
+The key stays in the app's private storage on your watch; it is not part of this repository.
+Without a key everything still works with OpenStreetMap-based services. Step-by-step, including how to restrict the
+key to this app: [docs/maps-google-key.md](docs/maps-google-key.md).
+
+---
+
+### Install on Watch — phone app
+
+`org.xzwatch.bridge.phone` · Android phone app
+
+Android 14+ refuses to install apps built for old Android versions (target SDK < 24) — which is exactly what the
+Ticwear/Wear ecosystem consists of. This app registers as a handler for `.apk` files ("Open with → Install on
+Watch"), and:
+
+* installs such an old app **on the phone** by using the phone's own adb connection with the
+  *bypass-low-target-sdk-block* flag (one-time setup: Wireless/USB debugging on, `adb tcpip 5555` once after each
+  phone reboot, and accept the "Allow USB debugging?" prompt once);
+* detects apps that embed a watch app (Wear/Ticwear "micro apps") so the watch version syncs through the companion.
+
+### Ticwear companion — patched for current Android
+
+`com.mobvoi.companion.global` 4.9.1 · phone app · **a modified build of Mobvoi's own companion app**
+
+The original declares an old target SDK (21), which Android 14+ refuses to install. This build changes only
+what is needed for modern Android: target SDK raised to 24 (so it installs normally, no adb flag), and a runtime
+permission request at start-up (the app predates runtime permissions and crashed without them). Everything else —
+pairing, notification sync, app sync, the internet-over-Bluetooth proxy for the watch — is Mobvoi's original code.
+Verified on an Android 16 phone: pairing works, the watch syncs data and apps over the Data Layer.
+
+### Mobvoi Store — patched
+
+`com.mobvoi.appstore` 1.3.1 · phone app · modified build of Mobvoi's app store
+
+Same treatment (target SDK 24, runtime permissions) plus a fix for installing: Android no longer accepts the
+`file://` links the store used to hand the installer, so installs now go through a `FileProvider`. If *Install on
+Watch* is present, the store sends downloaded apps straight to it, which is what lets old (target SDK < 24) store
+apps be installed on the phone — after which the companion syncs the embedded watch app to the watch automatically.
+
+> **About these two builds.** They are derived from software owned by Mobvoi Inc., which is not open source.
+> They are included here only because the originals no longer install on current Android and the service is no
+> longer maintained; they are not endorsed by Mobvoi, and Mobvoi may ask for them to be removed. See
+> [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+---
+
+## Flash the old ROM
+
+Only do this if you want to (re)install the stock firmware. **It erases everything on the watch.**
+
+**ROM to use:** `Tic_4.13.0_intl` (`mercury_i18n`, Android 5.1 LMY47I, `userdebug`). Its advantages here: international
+build, `adb root` works, no adb authorisation prompt.
+
+* **Download:** `ROM_DOWNLOAD_URL_PLACEHOLDER` *(link will be added here)*
+* **SHA-256:** `ROM_SHA256_PLACEHOLDER`
+
+Steps:
+
+1. Charge the watch (≥ 50 %) and keep it on the charger. Back up anything you want to keep — `/data` is wiped.
+2. Download the ROM `.zip`. **Do not unzip it.**
+3. Connect adb over Wi-Fi ([Connect the watch](#connect-the-watch)) and copy the zip to the watch
+   (≈ 300 MB — it takes about 15 minutes over Wi-Fi adb, so keep the screen awake and **do not run two copies at once**):
+
+   ```bash
+   adb push Ticwatch2-ROM.zip /sdcard/update.zip
+   adb shell md5 /sdcard/update.zip      # compare with: md5sum Ticwatch2-ROM.zip  (macOS: md5 -q)
+   ```
+4. Tell recovery to install it, then reboot into recovery (needs `adb root`, i.e. a `userdebug` ROM is already running):
+
+   ```bash
+   adb root
+   adb shell "mkdir -p /cache/recovery; echo --update_package=/sdcard/update.zip > /cache/recovery/command"
+   adb reboot recovery
+   ```
+
+   Recovery installs the package (a few minutes, black/progress screen), formats `/data`, and the watch reboots.
+   The first boot is slow.
+5. Re-enable ADB debugging, then run [`install-watch`](#the-watch-installer) to put the apps back.
+
+Good to know:
+
+* The stock recovery only accepts packages **signed by Mobvoi**. Re-packed or re-signed ROMs are rejected —
+  and replacing the recovery to get around that is risky. Use the original zip.
+* If you are on firmware without `adb root` (for example the Chinese 4.15 builds) you need another way to start the
+  update; the file you copy to `/sdcard/update.zip` is the same.
+* After flashing, `/data` is empty: pair the phone again, grant the per-app permissions again, and re-run the installer
+  (which also re-applies the system-app changes).
+
+---
+
+## How updates work (and how to publish one)
+
+The installers do **not** compare version numbers; they compare **checksums**. For every app in
+[`manifest.tsv`](manifest.tsv) they read the APK that is installed on the device, take its MD5, and compare it with the
+repository's. Different → install the repository's version. Same → skip.
+
+For users that means: *run the installer again* — it first runs `git pull` (clones) or downloads the changed files
+(ZIP downloads), then installs whatever differs. No version bookkeeping to forget.
+
+**To publish a new version** (maintainer):
+
+1. Replace the file in `apks/watch/` or `apks/phone/` with the new build — **sign it with the same key as before**;
+   Android refuses to update an app signed with a different key (users would need `--force`, which erases app data).
+2. Run `tools/update-manifest.sh` (refreshes the checksums in `manifest.tsv`). The GitHub Action in
+   `.github/workflows/manifest.yml` does the same automatically on every push that touches `apks/`.
+3. `git commit` and `git push`.
+
+**To add a new app:** put the APK under `apks/<target>/`, add a row to `manifest.tsv`
+(`target<TAB>package<TAB>file<TAB>md5<TAB>name`, target = `watch` or `phone`), then run `tools/update-manifest.sh`.
+
+Using a fork? The scripts read the repository address from `git remote origin`; for a ZIP download set
+`TICWATCH2_REVIVE_RAW=https://raw.githubusercontent.com/<you>/ticwatch2-revive/main` or edit `DEFAULT_RAW` in
+`lib/common.sh` / `lib/common.ps1`.
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `adb` says the watch is **offline**, or the link drops mid-install | The watch's Wi-Fi sleeps with the screen. Put it on the charger (the installer then also keeps the screen on), toggle *ADB debugging* off/on, re-run. |
+| "no Ticwatch 2 found" | Check the IP:PORT in Developer options, that the computer is on the same network, and run `adb connect IP:PORT`. |
+| Apps on the watch **time out on every connection** although Wi-Fi is connected | The ROM can leave its Doze firewall chain attached while the watch is awake, which drops all third-party app traffic. With root adb: `adb root; adb shell ndc firewall detach_specified_chain fw_doze` (a reboot also clears it). |
+| Microphone does nothing / "Mic blocked" | Ticwear has its own permission gate: Settings → Apps → the app → allow Microphone. |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | The app on the watch was signed with another key. `--force` replaces it (erases that app's data). |
+| An HTTPS site fails with handshake / certificate errors | Android 5.1's trust store lacks newer roots (ISRG/Let's Encrypt, Google Trust Services, Amazon) and it cannot speak TLS 1.3-only servers. Choose services that still serve TLS 1.2 chained to older roots. |
+| The watch will not pair with the new companion | A watch that was paired before must be factory-reset from the watch's Settings so it shows its pairing QR code again. |
+| Storage keeps filling up | The MediaTek loggers are back (e.g. after a reset): re-run `install-watch`. Delete `/sdcard/mtklog` once. |
+| Windows: "running scripts is disabled" | Use the `.bat` launchers — they bypass the policy for that single run. |
+
+---
+
+## Repository layout
+
+```text
+ticwatch2-revive/
+├── README.md
+├── install-watch.sh / .ps1 / .bat      watch installer (macOS+Linux / Windows)
+├── install-phone.sh / .ps1 / .bat      phone installer
+├── manifest.tsv                        which APKs exist, for which device, and their checksums
+├── system-apps.tsv                     system apps the watch installer disables
+├── apks/
+│   ├── watch/   xiaozhi-watch.apk  watch-maps.apk
+│   └── phone/   ticwear-companion-a16.apk  mobvoi-store-a16.apk  phone-bridge.apk
+├── docs/        maps-google-key.md
+├── lib/         shared installer code (common.sh, common.ps1)
+├── tools/       update-manifest.sh (maintainer helper)
+├── .github/workflows/manifest.yml      keeps manifest.tsv in sync with apks/
+├── THIRD_PARTY_NOTICES.md
+└── LICENSE
+```
+
+The watch apps and *Install on Watch* are signed with this project's key; the patched companion and store are
+signed with a second key (`CN=companion-a16`) because Mobvoi's original signing key is not available.
+
+---
+
+## Credits, licences, disclaimer
+
+* Scripts: see [LICENSE](LICENSE). Bundled third-party components and their licences: see
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+* Map data © OpenStreetMap contributors (ODbL). Please respect the usage policies of the public OpenStreetMap tile,
+  Nominatim and BRouter services; the apps are meant for personal use of one watch.
+* Speech recognition: *Whistle* by Cactus Compute (Apache-2.0).
+
+### Test status
+
+| Piece | Verified |
+|---|---|
+| `install-watch.sh` — install, update, online sync, disable, `--restore` | on a real Ticwatch 2 from macOS |
+| `install-watch.sh` / `install-phone.sh` on Linux | against a simulated adb device (Ubuntu) |
+| `install-watch.ps1` / `install-phone.ps1` on Windows | with PowerShell 7 against a simulated adb device — not yet on a real Windows PC |
+| `install-phone` on a real phone | not yet |
+| Flashing section | written from the stock recovery's behaviour; follow it carefully and report problems |
+
+Reports and fixes are welcome.
+
+### Disclaimer
+
+This software is provided **as is**, without warranty. Installing apps, disabling system packages or flashing firmware
+can make a device misbehave or, in the worst case, stop working. You do all of this at your own risk and should
+back up first. This project is independent of, and not endorsed by, Mobvoi, the Xiaozhi project, Google,
+OpenStreetMap or Cactus Compute; all trademarks belong to their owners.

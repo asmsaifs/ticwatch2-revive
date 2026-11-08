@@ -1,0 +1,5 @@
+.cache/
+.platform-tools/
+.DS_Store
+Thumbs.db
+*.idsig
