@@ -4,8 +4,8 @@
 
 # ----------------------------------------------------------------- config
 # Used only when the script is not inside a git clone that has an "origin" remote.
-# Replace YOUR_GITHUB_USERNAME once, or export TICWATCH2_REVIVE_RAW to override.
-DEFAULT_RAW="https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/ticwatch2-revive/main"
+# Change it if you fork the repository, or export TICWATCH2_REVIVE_RAW to override.
+DEFAULT_RAW="https://raw.githubusercontent.com/asmsaifs/ticwatch2-revive/main"
 PLATFORM_TOOLS_BASE="https://dl.google.com/android/repository/platform-tools-latest"
 
 # ----------------------------------------------------------------- output
@@ -66,7 +66,6 @@ raw_base() {
     url=${url%.git}
     if [ -n "$url" ]; then printf 'https://raw.githubusercontent.com/%s/%s' "$url" "$br"; return; fi
   fi
-  case "$DEFAULT_RAW" in *YOUR_GITHUB_USERNAME*) return 0 ;; esac
   printf '%s' "$DEFAULT_RAW"
 }
 

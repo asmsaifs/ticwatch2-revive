@@ -3,8 +3,8 @@
 
 # ----------------------------------------------------------------- config
 # Used only when the folder is not a git clone with an "origin" remote.
-# Replace YOUR_GITHUB_USERNAME once, or set $env:TICWATCH2_REVIVE_RAW to override.
-$script:DefaultRaw = 'https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/ticwatch2-revive/main'
+# Change it if you fork the repository, or set $env:TICWATCH2_REVIVE_RAW to override.
+$script:DefaultRaw = 'https://raw.githubusercontent.com/asmsaifs/ticwatch2-revive/main'
 $script:PlatformToolsUrl = 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip'
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
@@ -79,8 +79,7 @@ function Get-RawBase {
         elseif ($url -match '^git@github\.com:(.+?)(\.git)?$') { $path = $Matches[1] }
         if ($path) { return "https://raw.githubusercontent.com/$path/$br" }
     }
-    if ($script:DefaultRaw -notmatch 'YOUR_GITHUB_USERNAME') { return $script:DefaultRaw }
-    return ''
+    return $script:DefaultRaw
 }
 
 function Sync-Repo {

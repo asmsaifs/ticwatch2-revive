@@ -48,7 +48,7 @@ This repository collects what is needed to make the watch useful again:
 ## Quick start
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/ticwatch2-revive.git
+git clone https://github.com/asmsaifs/ticwatch2-revive.git
 cd ticwatch2-revive
 ```
 
@@ -69,7 +69,7 @@ the repository on their own.
 
 ## What you need
 
-* A Ticwatch 2 (codename *mercury*). Written for the international ROM **Tic_4.13.0_intl**
+* A Ticwatch 2 (codename *mercury*). Written for the international ROM **Tic_4.13.0_intl_a1** (beta)
   (Android 5.1, `userdebug` build); other Ticwear 2 builds probably work but are untested.
 * A computer with **macOS, Linux or Windows 10/11**. The scripts need nothing but a terminal / PowerShell; if
   Android's `adb` tool is missing they offer to download Google's official *platform-tools* for you.
@@ -266,11 +266,12 @@ apps be installed on the phone — after which the companion syncs the embedded 
 
 Only do this if you want to (re)install the stock firmware. **It erases everything on the watch.**
 
-**ROM to use:** `Tic_4.13.0_intl` (`mercury_i18n`, Android 5.1 LMY47I, `userdebug`). Its advantages here: international
+**ROM to use:** `Tic_4.13.0_intl_a1` beta (`mercury_i18n`, Android 5.1 LMY47I, `userdebug`). Its advantages here: international
 build, `adb root` works, no adb authorisation prompt.
 
-* **Download:** `ROM_DOWNLOAD_URL_PLACEHOLDER` *(link will be added here)*
-* **SHA-256:** `ROM_SHA256_PLACEHOLDER`
+* **Download:** https://drive.google.com/file/d/1wUHszY569mBPEb_MoSA3fjyQycJK-Ewf/view?usp=sharing
+* **SHA-256:** `500512999d8167b6eade1375f1e454a6d6f5e5fa4e3e855d81f7225d43e40130`
+  (file: `Ticwatch2-i18n-beta-Tic_4.13.0_intl_a1-1505989793818.zip`, 278,768,935 bytes — check with `shasum -a 256 <file>` on macOS/Linux or `Get-FileHash <file>` in Windows PowerShell)
 
 Steps:
 
@@ -280,8 +281,8 @@ Steps:
    (≈ 300 MB — it takes about 15 minutes over Wi-Fi adb, so keep the screen awake and **do not run two copies at once**):
 
    ```bash
-   adb push Ticwatch2-ROM.zip /sdcard/update.zip
-   adb shell md5 /sdcard/update.zip      # compare with: md5sum Ticwatch2-ROM.zip  (macOS: md5 -q)
+   adb push Ticwatch2-i18n-beta-Tic_4.13.0_intl_a1-1505989793818.zip /sdcard/update.zip
+   adb shell md5 /sdcard/update.zip      # compare with: md5sum Ticwatch2-i18n-beta-Tic_4.13.0_intl_a1-1505989793818.zip  (macOS: md5 -q)
    ```
 4. Tell recovery to install it, then reboot into recovery (needs `adb root`, i.e. a `userdebug` ROM is already running):
 
