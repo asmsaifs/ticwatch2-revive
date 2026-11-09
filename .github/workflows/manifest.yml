@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'apks/**'
+      - 'patches/**'
   workflow_dispatch:
 
 permissions:

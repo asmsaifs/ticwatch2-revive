@@ -15,7 +15,8 @@ are left alone.
 
   --addr IP:PORT   connect to the watch over Wi-Fi first (e.g. 192.168.1.50:5555)
   --no-disable     only install/update the apps, do not touch system apps
-  --restore        undo: re-enable the system apps that were disabled by this script
+  --no-home-patch  do not patch Ticwear home (voice launches then keep opening Tico)
+  --restore        undo: re-enable the disabled system apps and put the original Ticwear home back
   --force          if an app is installed with a different signing key, uninstall it first
                    (erases that app's data)
   --offline        do not look for newer files online (no git pull / download)
@@ -25,12 +26,13 @@ are left alone.
 '@ | Write-Host
 }
 
-$script:Addr = ''; $noDisable = $false; $restore = $false; $script:Force = $false
+$script:Addr = ''; $noDisable = $false; $noHome = $false; $restore = $false; $script:Force = $false
 $script:Offline = $false; $script:AssumeYes = $false; $script:DryRun = $false
 for ($i = 0; $i -lt $args.Count; $i++) {
     switch -Regex ($args[$i]) {
         '^-{1,2}addr$'       { $i++; $script:Addr = [string]$args[$i]; if (-not $script:Addr) { Die '--addr needs IP:PORT' } }
         '^-{1,2}no-?disable$' { $noDisable = $true }
+        '^-{1,2}no-?home-?patch$' { $noHome = $true }
         '^-{1,2}restore$'    { $restore = $true }
         '^-{1,2}force$'      { $script:Force = $true }
         '^-{1,2}offline$'    { $script:Offline = $true }
@@ -64,11 +66,18 @@ try {
     if ($restore) {
         Step 'Re-enabling system apps'
         Apply-SysApps $script:Watch 'enable'
+        Step 'Putting the original Ticwear home back'
+        $null = Home-Patch $script:Watch 'restore'
         Say ''; Say 'Done.'; exit 0
     }
 
     Step 'Installing apps'
     $okAll = Install-Target $script:Watch 'watch'
+
+    if (-not $noHome) {
+        Step 'Voice button -> Sonora (Ticwear home patch)'
+        if (-not (Home-Patch $script:Watch 'apply')) { $okAll = $false }
+    }
 
     if (-not $noDisable) {
         Step 'Disabling unneeded system apps'
@@ -83,7 +92,7 @@ try {
    * Settings > Apps (or the permission prompt): allow Microphone for Sonora and Maps, and Internet if asked.
    * Maps: optional Google key - see README > Maps. Without a key routing + search use OpenStreetMap services.
    * Sonora: with Xiaozhi, open it once for a pairing code; with Home Assistant see docs/home-assistant.md.
-  Re-run this script any time to pick up new versions. Undo the system-app changes with --restore.
+  Re-run this script any time to pick up new versions. Undo the system-app and home changes with --restore.
 '@ | Write-Host
     if (-not $okAll) { exit 1 }
 } finally {

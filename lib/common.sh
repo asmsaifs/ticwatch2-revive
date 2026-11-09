@@ -256,3 +256,98 @@ pick_watch() { # sets WATCH
   done
   ok "watch found: $WATCH"
 }
+
+# ----------------------------------------------------------------- Ticwear home patch
+# Makes every voice launch of the watch (swipe right on the watch face, "OK Tico", the wrist gesture)
+# open Sonora instead of Tico; if Sonora is missing, Tico still opens. Ticwear home is a platform-signed
+# system app, so its APK cannot be re-signed: only its compiled code (the .odex) is replaced. The
+# patched classes.dex is compiled ON the watch by the watch's own dex2oat against its own boot image.
+# Needs adb root (the userdebug ROM from the README has it). Built for Tic_4.13.0_intl_a1 only: on any
+# other Ticwear home the step is skipped. The original odex is kept in /system/xzpatch (survives a
+# factory reset); --restore puts it back.
+HOME_PKG=com.mobvoi.ticwear.home
+HOME_ODEX=/system/priv-app/MobvoiWearHome/arm/MobvoiWearHome.odex
+HOME_APK=/system/priv-app/MobvoiWearHome/MobvoiWearHome.apk
+HOME_ORIG_MD5=1fd6479ec9b71dc3108e2b594302cc2a   # stock odex of Tic_4.13.0_intl_a1
+HOME_BAK=/system/xzpatch
+HOME_TMP=/data/local/tmp/xzpatch
+
+# 0 when adbd on the device runs as root; restarts adbd as root once if needed.
+dev_root() { # serial
+  local s=$1 i
+  dev_sh "$s" id | grep -q 'uid=0' && return 0
+  adb_s "$s" root >/dev/null 2>&1
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 2
+    case "$s" in *:*) "$ADB" connect "$s" >/dev/null 2>&1 </dev/null ;; esac
+    dev_sh "$s" id | grep -q 'uid=0' && return 0
+  done
+  return 1
+}
+
+dev_md5() { dev_sh "$1" "md5 $2 2>/dev/null || md5sum $2 2>/dev/null" | awk 'NF {print $1; exit}'; }
+
+restart_home() {
+  dev_sh "$1" "am force-stop $HOME_PKG; sleep 2; am start -a android.intent.action.MAIN -c android.intent.category.HOME" >/dev/null 2>&1 || true
+}
+
+# Swap an odex already on the watch ($2) into place, atomically (same file system rename).
+swap_home_odex() { # serial src
+  dev_sh "$1" "cp $2 $HOME_ODEX.new && chmod 644 $HOME_ODEX.new && chown root:root $HOME_ODEX.new && chcon u:object_r:system_file:s0 $HOME_ODEX.new && mv $HOME_ODEX.new $HOME_ODEX && sync && echo SWAP_OK"
+}
+
+home_patch() { # serial apply|restore
+  local s=$1 mode=$2 row file want dex cur mdex modex bak out
+  if ! dev_root "$s"; then
+    warn "skipped: needs adb root (the userdebug ROM in README › Flash the old ROM has it)"; return 0
+  fi
+  cur=$(dev_md5 "$s" "$HOME_ODEX")
+  [ -n "$cur" ] || { warn "skipped: Ticwear home not found on this watch"; return 0; }
+  out=$(dev_sh "$s" "cat $HOME_BAK/applied 2>/dev/null"); mdex=$(printf '%s\n' "$out" | awk 'NF {print $1; exit}'); modex=$(printf '%s\n' "$out" | awk 'NF {print $2; exit}')
+  bak=$(dev_md5 "$s" "$HOME_BAK/MobvoiWearHome.odex.orig")
+
+  if [ "$mode" = restore ]; then
+    if [ "$cur" = "$HOME_ORIG_MD5" ]; then ok "Ticwear home is the original"; return 0; fi
+    [ "$bak" = "$HOME_ORIG_MD5" ] || { err "no backup of the original Ticwear home on the watch – reflash the ROM to undo"; return 1; }
+    [ "${DRY_RUN:-0}" = 1 ] && { say "  (dry run) restore $HOME_ODEX from $HOME_BAK"; return 0; }
+    adb_s "$s" remount >/dev/null 2>&1
+    case "$(swap_home_odex "$s" "$HOME_BAK/MobvoiWearHome.odex.orig")" in *SWAP_OK*) ;; *) err "could not restore the original Ticwear home"; return 1 ;; esac
+    dev_sh "$s" "rm -f $HOME_BAK/applied" >/dev/null
+    restart_home "$s"; ok "original Ticwear home restored (voice opens Tico again)"; return 0
+  fi
+
+  row=$(awk -F'\t' '$1=="watch-home" {print; exit}' "$MANIFEST")
+  [ -n "$row" ] || { warn "the manifest lists no home patch"; return 0; }
+  file=$(printf '%s' "$row" | cut -f3); want=$(printf '%s' "$row" | cut -f4)
+  dex=$(apk_for "$file" "$want")
+  [ -f "$dex" ] || { err "$file is listed in the manifest but missing"; return 1; }
+
+  if [ "$cur" = "$HOME_ORIG_MD5" ]; then say "  patching Ticwear home …"
+  elif [ -n "$mdex" ] && [ "$modex" = "$cur" ]; then
+    if [ "$mdex" = "$want" ]; then ok "Ticwear home patch is up to date"; return 0; fi
+    [ "$bak" = "$HOME_ORIG_MD5" ] || { err "patched Ticwear home without a backup of the original – skipped"; return 1; }
+    say "  updating the Ticwear home patch …"
+  else
+    warn "skipped: this watch's Ticwear home is not the Tic_4.13.0_intl_a1 one the patch was made for"; return 0
+  fi
+  [ "${DRY_RUN:-0}" = 1 ] && { say "  (dry run) compile $file on the watch and replace $HOME_ODEX"; return 0; }
+
+  out=$(adb_s "$s" remount 2>&1 | tr -d '\r')
+  case "$out" in *succeeded*) ;; *) err "cannot make /system writable: $out"; return 1 ;; esac
+  if [ "$bak" != "$HOME_ORIG_MD5" ]; then
+    out=$(dev_sh "$s" "mkdir -p $HOME_BAK && cp $HOME_ODEX $HOME_BAK/MobvoiWearHome.odex.orig && sync && echo BAK_OK")
+    case "$out" in *BAK_OK*) ;; *) err "could not back up the original Ticwear home – nothing changed"; return 1 ;; esac
+    [ "$(dev_md5 "$s" "$HOME_BAK/MobvoiWearHome.odex.orig")" = "$HOME_ORIG_MD5" ] || { err "backup of the original Ticwear home is damaged – nothing changed"; return 1; }
+  fi
+  dev_sh "$s" "rm -rf $HOME_TMP; mkdir -p $HOME_TMP" >/dev/null
+  say "  copying the patch to the watch …"
+  adb_s "$s" push "$dex" "$HOME_TMP/classes.dex" >/dev/null 2>&1 || { err "could not copy the patch to the watch"; return 1; }
+  [ "$(dev_md5 "$s" "$HOME_TMP/classes.dex")" = "$want" ] || { err "the patch arrived damaged on the watch – nothing changed"; return 1; }
+  say "  compiling it on the watch (takes a few minutes, keep the watch on the charger) …"
+  dev_sh "$s" "cd $HOME_TMP && dex2oat --runtime-arg -Xms64m --runtime-arg -Xmx512m --boot-image=/system/framework/boot.art --dex-file=$HOME_TMP/classes.dex --dex-location=$HOME_APK --oat-file=$HOME_TMP/MobvoiWearHome.odex --android-root=/system --instruction-set=arm --instruction-set-features=div --include-patch-information --runtime-arg -Xnorelocate --no-include-debug-symbols --compile-pic" >/dev/null
+  case "$(dev_sh "$s" "[ -s $HOME_TMP/MobvoiWearHome.odex ] && echo ODEX_OK")" in *ODEX_OK*) ;; *) err "compiling on the watch failed – nothing changed"; dev_sh "$s" "rm -rf $HOME_TMP" >/dev/null; return 1 ;; esac
+  case "$(swap_home_odex "$s" "$HOME_TMP/MobvoiWearHome.odex")" in *SWAP_OK*) ;; *) err "could not install the patched Ticwear home"; return 1 ;; esac
+  dev_sh "$s" "echo $want $(dev_md5 "$s" "$HOME_ODEX") > $HOME_BAK/applied; rm -rf $HOME_TMP" >/dev/null
+  restart_home "$s"
+  ok "Ticwear home patched: swipe right on the watch face or say \"OK Tico\" to open Sonora"
+}

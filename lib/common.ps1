@@ -276,3 +276,108 @@ function Pick-Watch {
     }
     Ok "watch found: $($script:Watch)"
 }
+
+# ----------------------------------------------------------------- Ticwear home patch
+# Makes every voice launch of the watch (swipe right on the watch face, "OK Tico", the wrist gesture)
+# open Sonora instead of Tico; if Sonora is missing, Tico still opens. Ticwear home is a platform-signed
+# system app, so its APK cannot be re-signed: only its compiled code (the .odex) is replaced. The
+# patched classes.dex is compiled ON the watch by the watch's own dex2oat against its own boot image.
+# Needs adb root (the userdebug ROM from the README has it). Built for Tic_4.13.0_intl_a1 only: on any
+# other Ticwear home the step is skipped. The original odex is kept in /system/xzpatch (survives a
+# factory reset); --restore puts it back.
+$script:HomePkg = 'com.mobvoi.ticwear.home'
+$script:HomeOdex = '/system/priv-app/MobvoiWearHome/arm/MobvoiWearHome.odex'
+$script:HomeApk = '/system/priv-app/MobvoiWearHome/MobvoiWearHome.apk'
+$script:HomeOrigMd5 = '1fd6479ec9b71dc3108e2b594302cc2a'   # stock odex of Tic_4.13.0_intl_a1
+$script:HomeBak = '/system/xzpatch'
+$script:HomeTmp = '/data/local/tmp/xzpatch'
+
+function Dev-Root([string]$s) {
+    if ((DevSh $s 'id') -match 'uid=0') { return $true }
+    AdbS $s @('root') | Out-Null
+    for ($i = 0; $i -lt 10; $i++) {
+        Start-Sleep 2
+        if ($s -match ':') { Adb @('connect', $s) | Out-Null }
+        if ((DevSh $s 'id') -match 'uid=0') { return $true }
+    }
+    return $false
+}
+
+function Dev-Md5([string]$s, [string]$path) {
+    foreach ($line in ((DevSh $s "md5 $path 2>/dev/null || md5sum $path 2>/dev/null") -split "`n")) {
+        $f = $line.Trim() -split '\s+'
+        if ($f[0] -match '^[0-9a-f]{32}$') { return $f[0] }
+    }
+    return ''
+}
+
+function Restart-Home([string]$s) {
+    try { DevSh $s "am force-stop $($script:HomePkg); sleep 2; am start -a android.intent.action.MAIN -c android.intent.category.HOME" | Out-Null } catch { }
+}
+
+# Swap an odex already on the watch into place, atomically (same file system rename).
+function Swap-HomeOdex([string]$s, [string]$src) {
+    $o = $script:HomeOdex
+    return ((DevSh $s "cp $src $o.new && chmod 644 $o.new && chown root:root $o.new && chcon u:object_r:system_file:s0 $o.new && mv $o.new $o && sync && echo SWAP_OK") -match 'SWAP_OK')
+}
+
+function Home-Patch([string]$s, [string]$mode) {
+    $bakFile = "$($script:HomeBak)/MobvoiWearHome.odex.orig"; $tmp = $script:HomeTmp
+    if (-not (Dev-Root $s)) { Warn 'skipped: needs adb root (the userdebug ROM in README > Flash the old ROM has it)'; return $true }
+    $cur = Dev-Md5 $s $script:HomeOdex
+    if (-not $cur) { Warn 'skipped: Ticwear home not found on this watch'; return $true }
+    $mark = ((DevSh $s "cat $($script:HomeBak)/applied 2>/dev/null").Trim() -split '\s+')
+    $mdex = if ($mark.Count -ge 1 -and $mark[0] -match '^[0-9a-f]{32}$') { $mark[0] } else { '' }
+    $modex = if ($mark.Count -ge 2) { $mark[1] } else { '' }
+    $bak = Dev-Md5 $s $bakFile
+
+    if ($mode -eq 'restore') {
+        if ($cur -eq $script:HomeOrigMd5) { Ok 'Ticwear home is the original'; return $true }
+        if ($bak -ne $script:HomeOrigMd5) { Err 'no backup of the original Ticwear home on the watch - reflash the ROM to undo'; return $false }
+        if ($script:DryRun) { Say "  (dry run) restore $($script:HomeOdex) from $($script:HomeBak)"; return $true }
+        AdbS $s @('remount') | Out-Null
+        if (-not (Swap-HomeOdex $s $bakFile)) { Err 'could not restore the original Ticwear home'; return $false }
+        DevSh $s "rm -f $($script:HomeBak)/applied" | Out-Null
+        Restart-Home $s; Ok 'original Ticwear home restored (voice opens Tico again)'; return $true
+    }
+
+    $row = $null
+    foreach ($r in (Read-Tsv $script:Manifest)) { if ($r[0] -eq 'watch-home') { $row = $r; break } }
+    if (-not $row) { Warn 'the manifest lists no home patch'; return $true }
+    $file = $row[2]; $want = $row[3]
+    $dex = Apk-For $file $want
+    if (-not (Test-Path $dex)) { Err "$file is listed in the manifest but missing"; return $false }
+
+    if ($cur -eq $script:HomeOrigMd5) { Say '  patching Ticwear home ...' }
+    elseif ($mdex -and $modex -eq $cur) {
+        if ($mdex -eq $want) { Ok 'Ticwear home patch is up to date'; return $true }
+        if ($bak -ne $script:HomeOrigMd5) { Err 'patched Ticwear home without a backup of the original - skipped'; return $false }
+        Say '  updating the Ticwear home patch ...'
+    } else {
+        Warn "skipped: this watch's Ticwear home is not the Tic_4.13.0_intl_a1 one the patch was made for"; return $true
+    }
+    if ($script:DryRun) { Say "  (dry run) compile $file on the watch and replace $($script:HomeOdex)"; return $true }
+
+    $out = (AdbS $s @('remount')).Out
+    if ($out -notmatch 'succeeded') { Err "cannot make /system writable: $($out.Trim())"; return $false }
+    if ($bak -ne $script:HomeOrigMd5) {
+        if ((DevSh $s "mkdir -p $($script:HomeBak) && cp $($script:HomeOdex) $bakFile && sync && echo BAK_OK") -notmatch 'BAK_OK') { Err 'could not back up the original Ticwear home - nothing changed'; return $false }
+        if ((Dev-Md5 $s $bakFile) -ne $script:HomeOrigMd5) { Err 'backup of the original Ticwear home is damaged - nothing changed'; return $false }
+    }
+    DevSh $s "rm -rf $tmp; mkdir -p $tmp" | Out-Null
+    Say '  copying the patch to the watch ...'
+    if ((AdbS $s @('push', $dex, "$tmp/classes.dex")).Code -ne 0) { Err 'could not copy the patch to the watch'; return $false }
+    if ((Dev-Md5 $s "$tmp/classes.dex") -ne $want) { Err 'the patch arrived damaged on the watch - nothing changed'; return $false }
+    Say '  compiling it on the watch (takes a few minutes, keep the watch on the charger) ...'
+    DevSh $s ("cd $tmp && dex2oat --runtime-arg -Xms64m --runtime-arg -Xmx512m --boot-image=/system/framework/boot.art " +
+        "--dex-file=$tmp/classes.dex --dex-location=$($script:HomeApk) --oat-file=$tmp/MobvoiWearHome.odex --android-root=/system " +
+        "--instruction-set=arm --instruction-set-features=div --include-patch-information --runtime-arg -Xnorelocate " +
+        "--no-include-debug-symbols --compile-pic") | Out-Null
+    if ((DevSh $s "[ -s $tmp/MobvoiWearHome.odex ] && echo ODEX_OK") -notmatch 'ODEX_OK') { Err 'compiling on the watch failed - nothing changed'; DevSh $s "rm -rf $tmp" | Out-Null; return $false }
+    if (-not (Swap-HomeOdex $s "$tmp/MobvoiWearHome.odex")) { Err 'could not install the patched Ticwear home'; return $false }
+    $newMd5 = Dev-Md5 $s $script:HomeOdex
+    DevSh $s "echo $want $newMd5 > $($script:HomeBak)/applied; rm -rf $tmp" | Out-Null
+    Restart-Home $s
+    Ok 'Ticwear home patched: swipe right on the watch face or say "OK Tico" to open Sonora'
+    return $true
+}

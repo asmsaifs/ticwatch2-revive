@@ -36,6 +36,14 @@ their 32-bit native libraries removed so they install on 64-bit-only phones). Th
 interoperability with watches that can no longer be served otherwise, and are not covered by this repository's MIT
 licence. Mobvoi's rights remain with Mobvoi; if you are the rights holder and want them removed, open an issue.
 
+## Modified Mobvoi software (watch)
+
+`patches/ticwear-home/MobvoiWearHome-classes.dex` is the code of Ticwear home (`com.mobvoi.ticwear.home`, from the
+Tic_4.13.0_intl_a1 ROM), **proprietary software owned by Mobvoi Inc.**, with one change: voice launches start the
+Sonora app instead of Mobvoi's discontinued Tico assistant (plus a small helper class that closes the Tico panel).
+The same terms as for the phone apps above apply: distributed without a licence from Mobvoi, for interoperability,
+not covered by this repository's MIT licence; rights holders can ask for removal by opening an issue.
+
 ## Not included
 
 The Ticwear firmware itself and the watch-side install bridge (it needs the system partition) are not part of this

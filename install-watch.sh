@@ -17,7 +17,8 @@ are left alone.
 
   --addr IP:PORT   connect to the watch over Wi-Fi first (e.g. 192.168.1.50:5555)
   --no-disable     only install/update the apps, do not touch system apps
-  --restore        undo: re-enable the system apps that were disabled by this script
+  --no-home-patch  do not patch Ticwear home (voice launches then keep opening Tico)
+  --restore        undo: re-enable the disabled system apps and put the original Ticwear home back
   --force          if an app is installed with a different signing key, uninstall it first
                    (erases that app's data)
   --offline        do not look for newer files online (no git pull / download)
@@ -27,11 +28,12 @@ are left alone.
 USAGE
 }
 
-ADDR=; NO_DISABLE=0; RESTORE=0; FORCE=0; OFFLINE=0; ASSUME_YES=0; DRY_RUN=0
+ADDR=; NO_DISABLE=0; NO_HOME=0; RESTORE=0; FORCE=0; OFFLINE=0; ASSUME_YES=0; DRY_RUN=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --addr) ADDR=${2:-}; [ -n "$ADDR" ] || die "--addr needs IP:PORT"; shift ;;
     --no-disable) NO_DISABLE=1 ;;
+    --no-home-patch) NO_HOME=1 ;;
     --restore) RESTORE=1 ;;
     --force) FORCE=1 ;;
     --offline) OFFLINE=1 ;;
@@ -65,12 +67,19 @@ stay_awake_on "$WATCH"
 if [ "$RESTORE" = 1 ]; then
   step "Re-enabling system apps"
   apply_sysapps "$WATCH" enable
+  step "Putting the original Ticwear home back"
+  home_patch "$WATCH" restore
   say; say "Done."; exit 0
 fi
 
 step "Installing apps"
 RC=0
 install_target "$WATCH" watch || RC=1
+
+if [ "$NO_HOME" = 0 ]; then
+  step "Voice button → Sonora (Ticwear home patch)"
+  home_patch "$WATCH" apply || RC=1
+fi
 
 if [ "$NO_DISABLE" = 0 ]; then
   step "Disabling unneeded system apps"
@@ -85,6 +94,6 @@ cat <<NEXT
    • Settings › Apps (or the permission prompt): allow Microphone for Sonora and Maps, and Internet if asked.
    • Maps: optional Google key – see README › Maps. Without a key routing + search use OpenStreetMap services.
    • Sonora: with Xiaozhi, open it once for a pairing code; with Home Assistant see docs/home-assistant.md.
-  Re-run this script any time to pick up new versions. Undo the system-app changes with --restore.
+  Re-run this script any time to pick up new versions. Undo the system-app and home changes with --restore.
 NEXT
 exit $RC
