@@ -209,6 +209,8 @@ The phone and the watch are told apart automatically, so both can be plugged in 
   (nearest first; tap to show on the map, long-press to remove, with undo), and saved places appear on the map as
   small amber stars.
 * **Uncluttered map:** the on-map buttons fade out after a few seconds; tap the map to bring them back.
+* **Swipe to pan:** the map screen turns off Ticwear's swipe-to-exit so right-to-left drags pan the map. To leave,
+  swipe right from the very left edge of the screen; the other screens still swipe-to-exit as usual.
 * **Routing:** walk, bike and drive. Google Routes API when a key is set, otherwise the free
   [BRouter](https://brouter.de) service (OpenStreetMap data, no key).
 * **Turn-by-turn navigation:** big turn arrow and distance, vibration patterns for "prepare" and "turn now",
