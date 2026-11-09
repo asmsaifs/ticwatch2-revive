@@ -264,6 +264,8 @@ against the watch's own boot image (about a minute), and swaps the result in for
   [BRouter](https://brouter.de) service (OpenStreetMap data, no key).
 * **Turn-by-turn navigation:** big turn arrow and distance, vibration patterns for "prepare" and "turn now",
   automatic re-routing, screen wake on each alert.
+* **Heading-up while navigating:** the map turns to face the way you point (watch compass). A compass needle at the
+  left edge toggles heading-up / north-up; the right-edge panel has zoom-out and recenter (double-tap zooms in).
 * Recent places, long-press the map to drop a pin.
 * Location comes from the watch's own GPS through the Ticwear location service.
 
