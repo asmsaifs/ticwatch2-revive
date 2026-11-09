@@ -28,6 +28,8 @@ adb shell am start -n org.xzwatch/.SettingsActivity \
 * The token is stored only in the app's private storage and is never shown again; the settings screen just says *Saved ✓*.
 * Remove the token: `adb shell am start -n org.xzwatch/.SettingsActivity --ez clear_ha_token true`
   (an empty `--es` value gets lost by `adb shell`, hence the separate flag).
+* `SecurityException: Permission Denial … not exported`: the watch has an older Sonora build. Run `install-watch`
+  again to update it. Only `adb` (and Sonora itself) can open this screen with settings; other watch apps cannot.
 
 ## 3. Check and choose a pipeline
 In the app: **Settings › Home Assistant › Test connection** shows your Home Assistant version and how many
