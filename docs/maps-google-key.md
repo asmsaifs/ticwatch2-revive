@@ -8,7 +8,7 @@ The app works without a key (OpenStreetMap). With your own Google Maps Platform 
 2. Billing → link a billing account (required by Google Maps Platform; there is a monthly free usage tier —
    check current pricing). Set a **budget alert** and, under the API's *Quotas*, a low daily cap.
 3. APIs & Services → Library → enable **Map Tiles API**.
-   (Later phases also need **Places API (New)** and **Routes API** — enable them when you want them.)
+   Also enable **Places API (New)** (search and nearby places) and **Routes API** (directions) if you want them from Google.
 4. APIs & Services → Credentials → *Create credentials → API key*.
 
 ## 2. Restrict the key (recommended)

@@ -16,7 +16,7 @@ This repository collects what is needed to make the watch useful again:
 | Part | What it is |
 |---|---|
 | **Xiaozhi** (watch app) | A voice-assistant client for the open *Xiaozhi* AI service — talk to the watch, it talks back |
-| **Maps** (watch app) | OpenStreetMap / Google maps with search, routing and turn-by-turn navigation, built for a round 400×400 screen |
+| **Maps** (watch app) | OpenStreetMap / Google maps with search, nearby places, saved places, routing and turn-by-turn navigation, built for a round 400×400 screen |
 | **Ticwear companion** (phone app, patched) | Mobvoi's phone companion rebuilt so it installs and runs on **Android 14–16** — pairs the phone with the watch, syncs apps and gives the watch internet over Bluetooth |
 | **Mobvoi Store** (phone app, patched) | The old Ticwear app store, patched so installing from it works on current Android |
 | **Install on Watch** (phone app) | Installs old, low-target-SDK `.apk` files on a modern Android phone and helps get Wear apps to the watch |
@@ -202,11 +202,17 @@ The phone and the watch are told apart automatically, so both can be plugged in 
 * **Search:** by keyboard, or by **voice** with a built-in, fully **offline** speech recogniser
   (Cactus *Whistle*, 17 MB, English/German/French/Spanish/Italian/Dutch/Polish — place names are best said in English).
   Search uses Google Places when a key is set, OpenStreetMap Nominatim otherwise.
+* **Nearby:** one-tap category chips on the search screen — Food, Cafe, ATM, Fuel, Pharmacy, Hospital, Mosque,
+  Grocery, Hotel — list places around you, nearest first (Google Places nearby search with a key, Nominatim without).
+* **Saved places:** star a place from its screen or long-press a search result. The *Saved* chip opens your list
+  (nearest first; tap to show on the map, long-press to remove, with undo), and saved places appear on the map as
+  small amber stars.
+* **Uncluttered map:** the on-map buttons fade out after a few seconds; tap the map to bring them back.
 * **Routing:** walk, bike and drive. Google Routes API when a key is set, otherwise the free
   [BRouter](https://brouter.de) service (OpenStreetMap data, no key).
 * **Turn-by-turn navigation:** big turn arrow and distance, vibration patterns for "prepare" and "turn now",
   automatic re-routing, screen wake on each alert.
-* Saved and recent places, long-press to drop a pin.
+* Recent places, long-press the map to drop a pin.
 * Location comes from the watch's own GPS through the Ticwear location service.
 
 **Google key (optional).** Create an API key in Google Cloud (Google requires a billing account; there is a monthly free
