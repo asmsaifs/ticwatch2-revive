@@ -73,7 +73,13 @@ raw_base() {
 sync_repo() {
   [ "${OFFLINE:-0}" = 1 ] && { say "  offline mode: using the files in this folder"; return 0; }
   if [ -d "$ROOT/.git" ] && have git; then
-    if git -C "$ROOT" pull --ff-only -q 2>/dev/null; then ok "repository updated (git pull)"; return 0; fi
+    local before; before=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)
+    if git -C "$ROOT" pull --ff-only -q 2>/dev/null; then
+      ok "repository updated (git pull)"
+      # The installer scripts themselves changed: the caller restarts so the new code runs now.
+      if [ -n "$before" ] && ! git -C "$ROOT" diff --quiet "$before" HEAD -- '*.sh' lib 2>/dev/null; then SCRIPTS_UPDATED=1; fi
+      return 0
+    fi
     warn "git pull did not work (local changes?) – trying a plain download instead"
   fi
   local raw; raw=$(raw_base)
@@ -169,12 +175,25 @@ install_app() {
   esac
 }
 
+# "32" if the device can run 32-bit ARM code (armeabi-v7a), "64" if it is a 64-bit-only phone
+# (newer Snapdragon / Tensor / Dimensity chips). The Mobvoi apps only carry 32-bit native libraries,
+# so 64-bit-only phones get the "-arm64" builds with those libraries stripped out.
+abi_class() { # serial
+  local l32 l
+  l32=$(dev_sh "$1" getprop ro.product.cpu.abilist32 | tr -d '\r\n ')
+  l=$(dev_sh "$1" getprop ro.product.cpu.abilist | tr -d '\r\n ')
+  case ",$l32,$l," in *,armeabi-v7a,*|*,armeabi,*) echo 32; return ;; esac
+  if [ -n "$l" ]; then echo 64; else echo 32; fi
+}
+
 # Run every manifest row for one target ("watch"/"phone") against a device.
+# Rows with target "<target>32" / "<target>64" are only used on devices of that ABI class.
 install_target() { # serial target
-  local s=$1 want=$2 target pkg file md5 name apk rc=0 n=0
+  local s=$1 want=$2 target pkg file md5 name apk rc=0 n=0 cls
+  cls=$(abi_class "$s")
   while IFS=$'\t' read -r target pkg file md5 name; do
     case "$target" in ''|\#*) continue ;; esac
-    [ "$target" = "$want" ] || continue
+    [ "$target" = "$want" ] || [ "$target" = "$want$cls" ] || continue
     apk=$(apk_for "$file" "$md5")
     if [ ! -f "$apk" ]; then err "$file is listed in the manifest but missing"; rc=1; continue; fi
     install_app "$s" "$apk" "$pkg" "$name" || rc=1; n=$((n+1))

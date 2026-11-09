@@ -167,7 +167,14 @@ After the **first** install, on the watch:
 It installs/updates the three phone apps — **Ticwear companion**, **Mobvoi Store** and **Install on Watch** (the same
 up-to-date check as above) — and grants *Install on Watch* the permissions it needs (notifications, Bluetooth,
 all-files access) where Android allows that from adb. The companion and the store ask for their own permissions
-the first time you open them.
+the first time you open them — allow them, the companion needs calendar, contacts, SMS and phone access to sync
+those to the watch.
+
+**64-bit-only phones** (recent Snapdragon, Tensor and Dimensity chips, e.g. Pixel 7 and newer, many 2024+ phones)
+cannot run 32-bit ARM code, and Mobvoi's apps only contain 32-bit native libraries. The installer detects this and
+installs the `-arm64` builds instead: the same apps, same signing key, with the native libraries removed. Those
+libraries only serve optional extras (phone-side voice wake-up, Baidu/Sogou maps, Weibo and UnionPay); pairing, app
+sync, notifications and the watch's internet-over-Bluetooth are plain Java and work the same.
 
 **Already have the original companion on the phone?** The patched apps are signed with a different key than
 Mobvoi's, so Android refuses to update over the originals (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Re-run with
@@ -263,6 +270,8 @@ what is needed for modern Android: target SDK raised to 24 (so it installs norma
 permission request at start-up (the app predates runtime permissions and crashed without them). Everything else —
 pairing, notification sync, app sync, the internet-over-Bluetooth proxy for the watch — is Mobvoi's original code.
 Verified on an Android 16 phone: pairing works, the watch syncs data and apps over the Data Layer.
+`ticwear-companion-a16-arm64.apk` is the same build without its 32-bit native libraries, for 64-bit-only phones
+(see [the phone installer](#the-phone-installer)).
 
 ### Mobvoi Store — patched
 
@@ -272,6 +281,7 @@ Same treatment (target SDK 24, runtime permissions) plus a fix for installing: A
 `file://` links the store used to hand the installer, so installs now go through a `FileProvider`. If *Install on
 Watch* is present, the store sends downloaded apps straight to it, which is what lets old (target SDK < 24) store
 apps be installed on the phone — after which the companion syncs the embedded watch app to the watch automatically.
+`mobvoi-store-a16-arm64.apk` is the same build without its 32-bit native libraries, for 64-bit-only phones.
 
 > **About these two builds.** They are derived from software owned by Mobvoi Inc., which is not open source.
 > They are included here only because the originals no longer install on current Android and the service is no
@@ -357,6 +367,11 @@ For users that means: *run the installer again* — it first runs `git pull` (cl
 **To add a new app:** put the APK under `apks/<target>/`, add a row to `manifest.tsv`
 (`target<TAB>package<TAB>file<TAB>md5<TAB>name`, target = `watch` or `phone`), then run `tools/update-manifest.sh`.
 
+**64-bit-only phones:** when a phone APK contains only 32-bit native libraries (`lib/armeabi-v7a/`), also build its
+variant with `tools/make-arm64-variant.sh KEYSTORE ALIAS apks/phone/X.apk` (same key as `X.apk`). It writes
+`X-arm64.apk`; `tools/update-manifest.sh` then marks the pair as target `phone64` / `phone32`, and the installer picks
+the one that matches the phone. Rebuild the variant whenever `X.apk` changes.
+
 Using a fork? The scripts read the repository address from `git remote origin`; for a ZIP download set
 `TICWATCH2_REVIVE_RAW=https://raw.githubusercontent.com/<you>/ticwatch2-revive/main` or edit `DEFAULT_RAW` in
 `lib/common.sh` / `lib/common.ps1`.
@@ -371,6 +386,7 @@ Using a fork? The scripts read the repository address from `git remote origin`; 
 | "no Ticwatch 2 found" | Check the IP:PORT in Developer options, that the computer is on the same network, and run `adb connect IP:PORT`. |
 | Apps on the watch **time out on every connection** although Wi-Fi is connected | The ROM can leave its Doze firewall chain attached while the watch is awake, which drops all third-party app traffic. With root adb: `adb root; adb shell ndc firewall detach_specified_chain fw_doze` (a reboot also clears it). |
 | Microphone does nothing / "Mic blocked" | Ticwear has its own permission gate: Settings → Apps → the app → allow Microphone. |
+| Phone: `INSTALL_FAILED_NO_MATCHING_ABIS` | A 64-bit-only phone with an old copy of the installer. Update the folder (`git pull`, or download the ZIP again) and re-run — it then installs the `-arm64` builds. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | The app on the watch was signed with another key. `--force` replaces it (erases that app's data). |
 | An HTTPS site fails with handshake / certificate errors | Android 5.1's trust store lacks newer roots (ISRG/Let's Encrypt, Google Trust Services, Amazon) and it cannot speak TLS 1.3-only servers. Choose services that still serve TLS 1.2 chained to older roots. |
 | The watch will not pair with the new companion | A watch that was paired before must be factory-reset from the watch's Settings so it shows its pairing QR code again. |
@@ -391,16 +407,18 @@ ticwatch2-revive/
 ├── apks/
 │   ├── watch/   sonora-watch.apk  watch-maps.apk
 │   └── phone/   ticwear-companion-a16.apk  mobvoi-store-a16.apk  phone-bridge.apk
+│                (+ *-arm64.apk: the same two Mobvoi apps for 64-bit-only phones)
 ├── docs/        maps-google-key.md  home-assistant.md
 ├── lib/         shared installer code (common.sh, common.ps1)
-├── tools/       update-manifest.sh (maintainer helper)
+├── tools/       update-manifest.sh, make-arm64-variant.sh (maintainer helpers)
 ├── .github/workflows/manifest.yml      keeps manifest.tsv in sync with apks/
 ├── THIRD_PARTY_NOTICES.md
 └── LICENSE
 ```
 
 The watch apps and *Install on Watch* are signed with this project's key; the patched companion and store are
-signed with a second key (`CN=companion-a16`) because Mobvoi's original signing key is not available.
+signed with a second key (`CN=companion-a16`) because Mobvoi's original signing key is not available. Their
+`-arm64` copies use that same key, so a phone can switch between the two without losing data.
 
 ---
 
@@ -419,7 +437,7 @@ signed with a second key (`CN=companion-a16`) because Mobvoi's original signing 
 | `install-watch.sh` — install, update, online sync, disable, `--restore` | on a real Ticwatch 2 from macOS |
 | `install-watch.sh` / `install-phone.sh` on Linux | against a simulated adb device (Ubuntu) |
 | `install-watch.ps1` / `install-phone.ps1` on Windows | with PowerShell 7 against a simulated adb device — not yet on a real Windows PC |
-| `install-phone` on a real phone | not yet |
+| `install-phone.sh` on a real phone | macOS → 64-bit-only Android 16 phone (Snapdragon SM7550): arm64 builds install and start |
 | Flashing section | written from the stock recovery's behaviour; follow it carefully and report problems |
 
 Reports and fixes are welcome.

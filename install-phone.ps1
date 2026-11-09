@@ -45,6 +45,12 @@ Say 'ticwatch2-revive - phone installer'
 
 Step 'Looking for newer app versions'
 Sync-Repo
+if ($script:ScriptsUpdated) {
+    Say '  the installer itself was updated - restarting it'
+    $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    & $exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @args --offline
+    exit $LASTEXITCODE
+}
 
 Step 'Android Debug Bridge'
 Find-Adb; Ok "adb: $($script:AdbExe)"
@@ -69,6 +75,7 @@ else {
 }
 if (-not $phone) { Die 'no phone found. Enable Developer options > USB debugging (or Wireless debugging and use --pair / --connect), then re-run.' }
 Ok ("phone: {0} ({1}, Android {2})" -f $phone, (DevSh $phone 'getprop ro.product.model').Trim(), (DevSh $phone 'getprop ro.build.version.release').Trim())
+if ((Abi-Class $phone) -eq '64') { Ok '64-bit-only phone: using the arm64 builds of the Mobvoi apps' }
 
 Step 'Installing apps'
 $okAll = Install-Target $phone 'phone'

@@ -29,9 +29,10 @@ A copy of the Apache-2.0 licence is at https://www.apache.org/licenses/LICENSE-2
 ## Modified Mobvoi software (phone apps)
 
 `apks/phone/ticwear-companion-a16.apk` (Ticwear Global companion 4.9.1) and `apks/phone/mobvoi-store-a16.apk`
-(Mobvoi Store 1.3.1) are **modified builds of proprietary software owned by Mobvoi Inc.** The changes are limited to
-compatibility with current Android (target SDK, runtime-permission request, `FileProvider`-based install hand-off,
-routing installs to *Install on Watch*). They are distributed here without any licence from Mobvoi, for
+(Mobvoi Store 1.3.1), and their `-arm64` copies, are **modified builds of proprietary software owned by Mobvoi Inc.**
+The changes are limited to compatibility with current Android (target SDK, runtime-permission request,
+`FileProvider`-based install hand-off, routing installs to *Install on Watch*; the `-arm64` copies additionally have
+their 32-bit native libraries removed so they install on 64-bit-only phones). They are distributed here without any licence from Mobvoi, for
 interoperability with watches that can no longer be served otherwise, and are not covered by this repository's MIT
 licence. Mobvoi's rights remain with Mobvoi; if you are the rights holder and want them removed, open an issue.
 

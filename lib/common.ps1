@@ -85,8 +85,17 @@ function Get-RawBase {
 function Sync-Repo {
     if ($script:Offline) { Say '  offline mode: using the files in this folder'; return }
     if ((Test-Path (Join-Path $script:Root '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+        $before = (Invoke-Native 'git' @('-C', $script:Root, 'rev-parse', 'HEAD')).Out.Trim()
         $r = Invoke-Native 'git' @('-C', $script:Root, 'pull', '--ff-only', '-q')
-        if ($r.Code -eq 0) { Ok 'repository updated (git pull)'; return }
+        if ($r.Code -eq 0) {
+            Ok 'repository updated (git pull)'
+            # The installer scripts themselves changed: the caller restarts so the new code runs now.
+            if ($before) {
+                $d = Invoke-Native 'git' @('-C', $script:Root, 'diff', '--quiet', $before, 'HEAD', '--', '*.ps1', '*.bat', 'lib')
+                if ($d.Code -eq 1) { $script:ScriptsUpdated = $true }
+            }
+            return
+        }
         Warn 'git pull did not work (local changes?) - trying a plain download instead'
     }
     $raw = Get-RawBase
@@ -197,10 +206,22 @@ function Install-App([string]$s, [string]$apk, [string]$pkg, [string]$name) {
     Err "${name}: $last"; return $false
 }
 
+# '32' if the device can run 32-bit ARM code (armeabi-v7a), '64' if it is a 64-bit-only phone
+# (newer Snapdragon / Tensor / Dimensity chips). The Mobvoi apps only carry 32-bit native libraries,
+# so 64-bit-only phones get the '-arm64' builds with those libraries stripped out.
+function Abi-Class([string]$s) {
+    $l32 = (DevSh $s 'getprop ro.product.cpu.abilist32').Trim()
+    $l = (DevSh $s 'getprop ro.product.cpu.abilist').Trim()
+    if ((",$l32,$l," -match ',armeabi-v7a,') -or (",$l32,$l," -match ',armeabi,')) { return '32' }
+    if ($l) { return '64' } else { return '32' }
+}
+
+# Rows with target '<target>32' / '<target>64' are only used on devices of that ABI class.
 function Install-Target([string]$s, [string]$want) {
     $rc = $true; $n = 0
+    $cls = Abi-Class $s
     foreach ($r in (Read-Tsv $script:Manifest)) {
-        if ($r[0] -ne $want) { continue }
+        if ($r[0] -ne $want -and $r[0] -ne "$want$cls") { continue }
         $pkg = $r[1]; $file = $r[2]; $md5 = $r[3]; $name = $r[4]
         $apk = Apk-For $file $md5
         if (-not (Test-Path $apk)) { Err "$file is listed in the manifest but missing"; $rc = $false; continue }

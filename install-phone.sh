@@ -2,6 +2,7 @@
 # ticwatch2-revive – install / update the phone-side app(s) on an Android phone.
 # Works on macOS, Linux, WSL and Git-Bash. Windows users: double-click install-phone.bat instead.
 set -u
+ORIG_ARGS=("$@")
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 . "$HERE/lib/common.sh"
@@ -46,6 +47,10 @@ say "ticwatch2-revive · phone installer"
 
 step "Looking for newer app versions"
 sync_repo
+if [ "${SCRIPTS_UPDATED:-0}" = 1 ]; then
+  say "  the installer itself was updated – restarting it"
+  exec bash "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"} --offline
+fi
 
 step "Android Debug Bridge"
 find_adb; ok "adb: $ADB"
@@ -76,6 +81,7 @@ if [ -z "$PHONE" ]; then
   die "no phone found. Enable Developer options › USB debugging (or Wireless debugging and use --pair / --connect), then re-run."
 fi
 ok "phone: $PHONE ($(dev_sh "$PHONE" getprop ro.product.model), Android $(dev_sh "$PHONE" getprop ro.build.version.release))"
+[ "$(abi_class "$PHONE")" = 64 ] && ok "64-bit-only phone: using the arm64 builds of the Mobvoi apps"
 
 step "Installing apps"
 RC=0

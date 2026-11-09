@@ -2,6 +2,7 @@
 # ticwatch2-revive – install / update the revive apps on a Ticwatch 2 and disable the log hogs.
 # Works on macOS, Linux, WSL and Git-Bash. Windows users: double-click install-watch.bat instead.
 set -u
+ORIG_ARGS=("$@")
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 . "$HERE/lib/common.sh"
@@ -47,6 +48,10 @@ say "ticwatch2-revive · watch installer"
 
 step "Looking for newer app versions"
 sync_repo
+if [ "${SCRIPTS_UPDATED:-0}" = 1 ]; then
+  say "  the installer itself was updated – restarting it"
+  exec bash "$0" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"} --offline
+fi
 
 step "Android Debug Bridge"
 find_adb; ok "adb: $ADB"

@@ -46,6 +46,12 @@ Say 'ticwatch2-revive - watch installer'
 
 Step 'Looking for newer app versions'
 Sync-Repo
+if ($script:ScriptsUpdated) {
+    Say '  the installer itself was updated - restarting it'
+    $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    & $exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @args --offline
+    exit $LASTEXITCODE
+}
 
 Step 'Android Debug Bridge'
 Find-Adb; Ok "adb: $($script:AdbExe)"
