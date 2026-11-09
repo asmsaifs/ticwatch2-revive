@@ -77,9 +77,9 @@ if [ "$RC" = 0 ]; then ok "all done"; else warn "finished with errors – see me
 cat <<NEXT
 
   Next, on the watch (first time after a reset):
-   • Settings › Apps (or the permission prompt): allow Microphone for Xiaozhi and Maps, and Internet if asked.
+   • Settings › Apps (or the permission prompt): allow Microphone for Sonora and Maps, and Internet if asked.
    • Maps: optional Google key – see README › Maps. Without a key routing + search use OpenStreetMap services.
-   • Xiaozhi: open it once; it shows a pairing code to enter in your Xiaozhi account.
+   • Sonora: with Xiaozhi, open it once for a pairing code; with Home Assistant see docs/home-assistant.md.
   Re-run this script any time to pick up new versions. Undo the system-app changes with --restore.
 NEXT
 exit $RC

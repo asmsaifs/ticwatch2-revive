@@ -15,7 +15,7 @@ This repository collects what is needed to make the watch useful again:
 
 | Part | What it is |
 |---|---|
-| **Xiaozhi** (watch app) | A voice-assistant client for the open *Xiaozhi* AI service — talk to the watch, it talks back |
+| **Sonora** (watch app) | A voice assistant for the watch — talk to it, it talks back. Works with the open *Xiaozhi* AI service or with your own **Home Assistant** (Assist) |
 | **Maps** (watch app) | OpenStreetMap / Google maps with search, nearby places, saved places, routing and turn-by-turn navigation, built for a round 400×400 screen |
 | **Ticwear companion** (phone app, patched) | Mobvoi's phone companion rebuilt so it installs and runs on **Android 14–16** — pairs the phone with the watch, syncs apps and gives the watch internet over Bluetooth |
 | **Mobvoi Store** (phone app, patched) | The old Ticwear app store, patched so installing from it works on current Android |
@@ -24,7 +24,7 @@ This repository collects what is needed to make the watch useful again:
 | **`install-phone`** | Same idea for the phone app |
 | **Flashing guide** | How to put the old, known-good ROM back on the watch |
 
-> **Not affiliated with** Mobvoi, Xiaozhi, Google, OpenStreetMap or Cactus Compute. Everything here is a
+> **Not affiliated with** Mobvoi, Xiaozhi, Home Assistant / Nabu Casa, Google, OpenStreetMap or Cactus Compute. Everything here is a
 > hobby project, provided as is. See [Disclaimer](#disclaimer).
 
 ---
@@ -74,7 +74,7 @@ the repository on their own.
 * A computer with **macOS, Linux or Windows 10/11**. The scripts need nothing but a terminal / PowerShell; if
   Android's `adb` tool is missing they offer to download Google's official *platform-tools* for you.
 * For the phone installer: an Android phone with **USB debugging** (or *Wireless debugging*) enabled.
-* Optional, per feature: a Google Maps API key (better maps/search/routing), an account on the Xiaozhi service.
+* Optional, per feature: a Google Maps API key (better maps/search/routing), an account on the Xiaozhi service, or a Home Assistant server with a long-lived access token.
 
 ---
 
@@ -143,8 +143,8 @@ If PowerShell refuses to run scripts, the `.bat` launcher already passes `-Execu
 
 After the **first** install, on the watch:
 
-* Ticwear asks per app for permissions — allow **Microphone** for Xiaozhi and Maps (and Internet if asked).
-* Maps: optionally set a Google key ([Maps](#maps--navigation-for-the-round-screen)). Xiaozhi: open it once, it shows a pairing code.
+* Ticwear asks per app for permissions — allow **Microphone** for Sonora and Maps (and Internet if asked).
+* Maps: optionally set a Google key ([Maps](#maps--navigation-for-the-round-screen)). Sonora: with Xiaozhi, open it once to get a pairing code; with Home Assistant, see [docs/home-assistant.md](docs/home-assistant.md).
 
 ---
 
@@ -181,18 +181,27 @@ The phone and the watch are told apart automatically, so both can be plugged in 
 
 ## The apps
 
-### Xiaozhi — voice assistant for the watch
+### Sonora — voice assistant for the watch
 
-`org.xzwatch` · watch app · talks to the open **Xiaozhi** AI voice service ([xiaozhi.me](https://xiaozhi.me)).
+`org.xzwatch` · watch app (formerly "Xiaozhi"; same package, so it updates in place and keeps your settings).
+Choose the assistant under **Settings › Assistant**:
+
+* **Xiaozhi** — the open **Xiaozhi** AI voice service ([xiaozhi.me](https://xiaozhi.me)).
+  First start shows a pairing code: enter it in your Xiaozhi account to activate the device. The service URL can be changed in settings.
+* **Home Assistant** — your own server's **Assist** pipeline (any language/voice/agent you set up there).
+  Needs the server address and a long-lived access token; setup, the follow-up-question behaviour and troubleshooting are in
+  [docs/home-assistant.md](docs/home-assistant.md).
+
+Common to both:
 
 * Press the orb (or hold it — switchable in settings) and talk; replies are spoken back.
-* *Auto* mode keeps the conversation going hands-free; *manual* mode is push-to-talk.
-* Audio is Opus-encoded on the watch (pure-Java encoder, no native code), streamed over a WebSocket.
+* *Tap* mode keeps the conversation going hands-free (with Home Assistant the microphone reopens only when it asks a follow-up
+  question); *Hold* mode is push-to-talk.
 * Built for the round screen: a state-coloured animated orb (idle / listening / thinking / speaking) and a transcript
-  that **scrolls and shrinks** so long sentences stay readable.
+  that **scrolls and shrinks** so long sentences stay readable (non-Latin text such as Bangla works).
 * Works over the watch's Wi-Fi, or — when Wi-Fi is off — through the phone's internet via the Ticwear companion.
-* First start shows a pairing code: enter it in your Xiaozhi account to activate the device.
-  The service URL can be changed in the app's settings.
+* Xiaozhi audio is Opus-encoded on the watch (pure-Java encoder, no native code) over a WebSocket; Home Assistant gets plain
+  16 kHz PCM over its WebSocket API and the spoken answer is played from the file it returns.
 
 ### Maps — navigation for the round screen
 
@@ -380,9 +389,9 @@ ticwatch2-revive/
 ├── manifest.tsv                        which APKs exist, for which device, and their checksums
 ├── system-apps.tsv                     system apps the watch installer disables
 ├── apks/
-│   ├── watch/   xiaozhi-watch.apk  watch-maps.apk
+│   ├── watch/   sonora-watch.apk  watch-maps.apk
 │   └── phone/   ticwear-companion-a16.apk  mobvoi-store-a16.apk  phone-bridge.apk
-├── docs/        maps-google-key.md
+├── docs/        maps-google-key.md  home-assistant.md
 ├── lib/         shared installer code (common.sh, common.ps1)
 ├── tools/       update-manifest.sh (maintainer helper)
 ├── .github/workflows/manifest.yml      keeps manifest.tsv in sync with apks/
@@ -419,5 +428,5 @@ Reports and fixes are welcome.
 
 This software is provided **as is**, without warranty. Installing apps, disabling system packages or flashing firmware
 can make a device misbehave or, in the worst case, stop working. You do all of this at your own risk and should
-back up first. This project is independent of, and not endorsed by, Mobvoi, the Xiaozhi project, Google,
+back up first. This project is independent of, and not endorsed by, Mobvoi, the Xiaozhi project, Home Assistant / Nabu Casa, Google,
 OpenStreetMap or Cactus Compute; all trademarks belong to their owners.

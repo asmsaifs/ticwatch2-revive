@@ -7,8 +7,8 @@ The APKs in `apks/` bundle or use the following components. Each stays under its
 | Component | Used by | Licence | Source |
 |---|---|---|---|
 | **osmdroid** 6.1.20 | Maps | Apache-2.0 | https://github.com/osmdroid/osmdroid |
-| **OkHttp** 3.12.13 and **Okio** 1.17.2 | Xiaozhi | Apache-2.0 | https://github.com/square/okhttp · https://github.com/square/okio |
-| **Concentus** 1.0.2 (pure-Java Opus codec) | Xiaozhi | BSD-style (same terms as Opus) — see upstream | https://github.com/lostromb/concentus |
+| **OkHttp** 3.12.13 and **Okio** 1.17.2 | Sonora | Apache-2.0 | https://github.com/square/okhttp · https://github.com/square/okio |
+| **Concentus** 1.0.2 (pure-Java Opus codec) | Sonora (Xiaozhi mode) | BSD-style (same terms as Opus) — see upstream | https://github.com/lostromb/concentus |
 | **Cactus engine** (`libcactus`) and **Whistle** speech model (16.9 MB) | Maps (offline voice search) | Apache-2.0 (engine and model card) | https://github.com/cactus-compute/cactus · https://huggingface.co/Cactus-Compute/whistle |
 | **Ticwear / Mobvoi SDK client library** (`mobvoi-api.jar`) | Maps (watch GPS, via the Ticwear location service) | Mobvoi's terms — see upstream | https://github.com/ticwear/sdk |
 | **Material icons** (vector drawables) | Maps | Apache-2.0 | https://github.com/google/material-design-icons |
@@ -24,6 +24,7 @@ A copy of the Apache-2.0 licence is at https://www.apache.org/licenses/LICENSE-2
 * **Google Maps Platform** (Map Tiles, Places, Routes) only with *your own* API key and under Google's terms;
   attribution is shown in the app.
 * **Xiaozhi** voice service — under that project's terms.
+* **Home Assistant** — only your own server, using its public WebSocket API with your own token (https://www.home-assistant.io).
 
 ## Modified Mobvoi software (phone apps)
 
