@@ -351,3 +351,81 @@ home_patch() { # serial apply|restore
   restart_home "$s"
   ok "Ticwear home patched: swipe right on the watch face or say \"OK Tico\" to open Sonora"
 }
+
+# ----------------------------------------------------------------- system apps on the watch
+# Manifest rows with target "watch-system" are apps that need system privileges (e.g. the
+# "Install on Watch" receiver, which installs APKs sent from the phone). They are copied to
+# /system/priv-app/<Name>/<Name>.apk (Name = APK file name). Android only picks up /system apps
+# while starting, so a change sets SYS_REBOOT=1 and the caller restarts the watch (reboot_watch).
+SYS_TMP=/data/local/tmp/xzsys
+SYS_REBOOT=0
+
+sysapps() { # serial install|remove
+  local s=$1 mode=$2 target pkg file md5 name apk base dir dest cur out p rc=0
+  awk -F'\t' '$1=="watch-system" {f=1} END {exit !f}' "$MANIFEST" || { warn "the manifest lists no system apps"; return 0; }
+  if ! dev_root "$s"; then
+    warn "skipped: needs adb root (the userdebug ROM in README › Flash the old ROM has it)"; return 0
+  fi
+  while IFS=$'\t' read -r target pkg file md5 name; do
+    [ "$target" = watch-system ] || continue
+    base=$(basename "$file" .apk); dir=/system/priv-app/$base; dest=$dir/$base.apk
+    cur=$(dev_md5 "$s" "$dest")
+    if [ "$mode" = remove ]; then
+      [ -n "$cur" ] || { ok "$name is not on the watch"; continue; }
+      [ "${DRY_RUN:-0}" = 1 ] && { say "  (dry run) delete $dir"; continue; }
+      out=$(adb_s "$s" remount 2>&1 | tr -d '\r')
+      case "$out" in *succeeded*) ;; *) err "cannot make /system writable: $out"; rc=1; continue ;; esac
+      case "$(dev_sh "$s" "rm -rf $dir && sync && echo RM_OK")" in
+        *RM_OK*) ok "$name removed"; SYS_REBOOT=1 ;; *) err "could not remove $name"; rc=1 ;;
+      esac
+      continue
+    fi
+    if [ "$cur" = "$md5" ]; then ok "$name is up to date"; continue; fi
+    apk=$(apk_for "$file" "$md5")
+    [ -f "$apk" ] || { err "$file is listed in the manifest but missing"; rc=1; continue; }
+    if [ -n "$cur" ]; then say "  updating $name …"; else say "  installing $name …"; fi
+    [ "${DRY_RUN:-0}" = 1 ] && { say "  (dry run) copy $file to $dest"; continue; }
+    out=$(adb_s "$s" remount 2>&1 | tr -d '\r')
+    case "$out" in *succeeded*) ;; *) err "cannot make /system writable: $out"; rc=1; continue ;; esac
+    # a normal (/data) install of the same package would shadow the system copy
+    p=$(installed_path "$s" "$pkg"); case "$p" in /data/*) adb_s "$s" uninstall "$pkg" >/dev/null 2>&1 ;; esac
+    dev_sh "$s" "rm -rf $SYS_TMP; mkdir -p $SYS_TMP" >/dev/null
+    adb_s "$s" push "$apk" "$SYS_TMP/$base.apk" >/dev/null 2>&1 || { err "could not copy $name to the watch"; rc=1; continue; }
+    [ "$(dev_md5 "$s" "$SYS_TMP/$base.apk")" = "$md5" ] || { err "$name arrived damaged on the watch – nothing changed"; rc=1; continue; }
+    out=$(dev_sh "$s" "mkdir -p $dir && chmod 755 $dir && chcon u:object_r:system_file:s0 $dir && cp $SYS_TMP/$base.apk $dest.new && chmod 644 $dest.new && chown root:root $dest.new && chcon u:object_r:system_file:s0 $dest.new && mv $dest.new $dest && rm -rf $SYS_TMP && sync && echo SYS_OK")
+    case "$out" in *SYS_OK*) ok "$name copied (active after the watch restarts)"; SYS_REBOOT=1 ;; *) err "could not install $name"; rc=1 ;; esac
+  done < "$MANIFEST"
+  return $rc
+}
+
+# Restart the watch and wait (up to ~5 min) until it is back.
+reboot_watch() { # serial
+  local s=$1 i
+  [ "${DRY_RUN:-0}" = 1 ] && { say "  (dry run) restart the watch"; return 0; }
+  say "  restarting the watch (takes about a minute) …"
+  stay_awake_off "$s"
+  adb_s "$s" reboot >/dev/null 2>&1
+  sleep 15
+  for i in $(seq 1 60); do
+    case "$s" in *:*) "$ADB" connect "$s" >/dev/null 2>&1 </dev/null ;; esac
+    if [ "$(dev_sh "$s" getprop sys.boot_completed 2>/dev/null | tr -d '\n ')" = 1 ]; then
+      sleep 10   # adbd restarts once more right after boot; let it settle
+      case "$s" in *:*) "$ADB" connect "$s" >/dev/null 2>&1 </dev/null ;; esac
+      ok "watch restarted"; stay_awake_on "$s"; return 0
+    fi
+    sleep 5
+  done
+  warn "the watch did not come back within 5 minutes – it finishes starting on its own; run this script again to check"
+  return 1
+}
+
+# After the restart: every system app must now run from /system/priv-app.
+check_sysapps() { # serial
+  local s=$1 target pkg file md5 name p rc=0
+  while IFS=$'\t' read -r target pkg file md5 name; do
+    [ "$target" = watch-system ] || continue
+    p=$(installed_path "$s" "$pkg")
+    case "$p" in /system/priv-app/*) ok "$name is active" ;; *) err "$name is not active after the restart (${p:-not installed})"; rc=1 ;; esac
+  done < "$MANIFEST"
+  return $rc
+}

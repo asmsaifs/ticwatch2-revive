@@ -381,3 +381,83 @@ function Home-Patch([string]$s, [string]$mode) {
     Ok 'Ticwear home patched: swipe right on the watch face or say "OK Tico" to open Sonora'
     return $true
 }
+
+# ----------------------------------------------------------------- system apps on the watch
+# Manifest rows with target "watch-system" are apps that need system privileges (e.g. the
+# "Install on Watch" receiver, which installs APKs sent from the phone). They are copied to
+# /system/priv-app/<Name>/<Name>.apk (Name = APK file name). Android only picks up /system apps
+# while starting, so a change sets $script:SysReboot and the caller restarts the watch.
+$script:SysTmp = '/data/local/tmp/xzsys'
+$script:SysReboot = $false
+
+function SysApps([string]$s, [string]$mode) {
+    $rows = New-Object System.Collections.ArrayList
+    foreach ($r in (Read-Tsv $script:Manifest)) { if ($r[0] -eq 'watch-system') { [void]$rows.Add($r) } }
+    if ($rows.Count -eq 0) { Warn 'the manifest lists no system apps'; return $true }
+    if (-not (Dev-Root $s)) { Warn 'skipped: needs adb root (the userdebug ROM in README > Flash the old ROM has it)'; return $true }
+    $okAll = $true; $tmp = $script:SysTmp
+    foreach ($r in $rows) {
+        $pkg = $r[1]; $file = $r[2]; $md5 = $r[3]; $name = $r[4]
+        $base = [IO.Path]::GetFileNameWithoutExtension($file); $dir = "/system/priv-app/$base"; $dest = "$dir/$base.apk"
+        $cur = Dev-Md5 $s $dest
+        if ($mode -eq 'remove') {
+            if (-not $cur) { Ok "$name is not on the watch"; continue }
+            if ($script:DryRun) { Say "  (dry run) delete $dir"; continue }
+            $out = (AdbS $s @('remount')).Out
+            if ($out -notmatch 'succeeded') { Err "cannot make /system writable: $($out.Trim())"; $okAll = $false; continue }
+            if ((DevSh $s "rm -rf $dir && sync && echo RM_OK") -match 'RM_OK') { Ok "$name removed"; $script:SysReboot = $true }
+            else { Err "could not remove $name"; $okAll = $false }
+            continue
+        }
+        if ($cur -eq $md5) { Ok "$name is up to date"; continue }
+        $apk = Apk-For $file $md5
+        if (-not (Test-Path $apk)) { Err "$file is listed in the manifest but missing"; $okAll = $false; continue }
+        if ($cur) { Say "  updating $name ..." } else { Say "  installing $name ..." }
+        if ($script:DryRun) { Say "  (dry run) copy $file to $dest"; continue }
+        $out = (AdbS $s @('remount')).Out
+        if ($out -notmatch 'succeeded') { Err "cannot make /system writable: $($out.Trim())"; $okAll = $false; continue }
+        # a normal (/data) install of the same package would shadow the system copy
+        if ((Installed-Path $s $pkg).StartsWith('/data/')) { AdbS $s @('uninstall', $pkg) | Out-Null }
+        DevSh $s "rm -rf $tmp; mkdir -p $tmp" | Out-Null
+        if ((AdbS $s @('push', $apk, "$tmp/$base.apk")).Code -ne 0) { Err "could not copy $name to the watch"; $okAll = $false; continue }
+        if ((Dev-Md5 $s "$tmp/$base.apk") -ne $md5) { Err "$name arrived damaged on the watch - nothing changed"; $okAll = $false; continue }
+        $out = DevSh $s ("mkdir -p $dir && chmod 755 $dir && chcon u:object_r:system_file:s0 $dir && cp $tmp/$base.apk $dest.new && " +
+            "chmod 644 $dest.new && chown root:root $dest.new && chcon u:object_r:system_file:s0 $dest.new && mv $dest.new $dest && " +
+            "rm -rf $tmp && sync && echo SYS_OK")
+        if ($out -match 'SYS_OK') { Ok "$name copied (active after the watch restarts)"; $script:SysReboot = $true }
+        else { Err "could not install $name"; $okAll = $false }
+    }
+    return $okAll
+}
+
+# Restart the watch and wait (up to ~5 min) until it is back.
+function Reboot-Watch([string]$s) {
+    if ($script:DryRun) { Say '  (dry run) restart the watch'; return $true }
+    Say '  restarting the watch (takes about a minute) ...'
+    StayAwake $s $false
+    AdbS $s @('reboot') | Out-Null
+    Start-Sleep 15
+    for ($i = 0; $i -lt 60; $i++) {
+        if ($s -match ':') { Adb @('connect', $s) | Out-Null }
+        if ((DevSh $s 'getprop sys.boot_completed').Trim() -eq '1') {
+            Start-Sleep 10   # adbd restarts once more right after boot; let it settle
+            if ($s -match ':') { Adb @('connect', $s) | Out-Null }
+            Ok 'watch restarted'; StayAwake $s $true; return $true
+        }
+        Start-Sleep 5
+    }
+    Warn 'the watch did not come back within 5 minutes - it finishes starting on its own; run this script again to check'
+    return $false
+}
+
+# After the restart: every system app must now run from /system/priv-app.
+function Check-SysApps([string]$s) {
+    $okAll = $true
+    foreach ($r in (Read-Tsv $script:Manifest)) {
+        if ($r[0] -ne 'watch-system') { continue }
+        $p = Installed-Path $s $r[1]
+        if ($p.StartsWith('/system/priv-app/')) { Ok "$($r[4]) is active" }
+        else { Err "$($r[4]) is not active after the restart ($(if ($p) { $p } else { 'not installed' }))"; $okAll = $false }
+    }
+    return $okAll
+}

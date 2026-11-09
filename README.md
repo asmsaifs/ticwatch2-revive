@@ -19,9 +19,9 @@ This repository collects what is needed to make the watch useful again:
 | **Maps** (watch app) | OpenStreetMap / Google maps with search, nearby places, saved places, routing and turn-by-turn navigation, built for a round 400×400 screen |
 | **Ticwear companion** (phone app, patched) | Mobvoi's phone companion rebuilt so it installs and runs on **Android 14–16** — pairs the phone with the watch, syncs apps and gives the watch internet over Bluetooth |
 | **Mobvoi Store** (phone app, patched) | The old Ticwear app store, patched so installing from it works on current Android |
-| **Install on Watch** (phone app) | Installs old, low-target-SDK `.apk` files on a modern Android phone and helps get Wear apps to the watch |
+| **Install on Watch** (phone app + small watch receiver) | Installs old, low-target-SDK `.apk` files on a modern Android phone and sends watch apps to the watch over Bluetooth |
 | **Ticwear home patch** (watch) | Makes the watch's own voice launches — swipe right on the watch face, "OK Tico", the wrist gesture — open Sonora instead of Mobvoi's dead Tico assistant |
-| **`install-watch`** | One script (macOS · Linux · Windows) that installs/updates the watch apps, applies the home patch and switches off the log-filling system apps |
+| **`install-watch`** | One script (macOS · Linux · Windows) that installs/updates the watch apps and the Install on Watch receiver, applies the home patch and switches off the log-filling system apps |
 | **`install-phone`** | Same idea for the phone app |
 | **Flashing guide** | How to put the old, known-good ROM back on the watch |
 
@@ -103,7 +103,8 @@ If you flashed the `userdebug` ROM described [below](#flash-the-old-rom), adb ne
   --addr IP:PORT   connect to the watch over Wi-Fi first
   --no-disable     only install/update apps, leave system apps alone
   --no-home-patch  do not patch Ticwear home (voice launches keep opening Tico)
-  --restore        undo: re-enable the system apps this script disabled and put the original Ticwear home back
+  --restore        undo: re-enable the system apps this script disabled, put the original Ticwear home back
+                   and remove the Install on Watch receiver (restarts the watch)
   --force          replace an app that was installed with a different signing key (erases its data)
   --offline        do not look for newer files online
   --yes            answer "yes" to prompts (e.g. downloading platform-tools)
@@ -119,10 +120,14 @@ What it does, in order:
 4. **Installs or updates each watch app** in [`manifest.tsv`](manifest.tsv). It compares the checksum of the APK
    *on the watch* with the one in the repository, so unchanged apps are skipped and any new build is installed.
    User data is kept (`adb install -r`).
-5. **Patches Ticwear home** so the watch's voice launches open Sonora — see
+5. **Installs the Install on Watch receiver** (`org.xzwatch.bridge.watch`), the watch half of
+   [Install on Watch](#install-on-watch--phone-app). It needs system rights to install apps, so it is copied to
+   `/system/priv-app/XzBridge/` (needs adb root, like the home patch) and the watch **restarts once** at the end of the
+   run so Android picks it up. Only when it is missing or changed; a reflash removes it, re-running brings it back.
+6. **Patches Ticwear home** so the watch's voice launches open Sonora — see
    [Ticwear home patch](#ticwear-home-patch--voice-launches-open-sonora). Skipped with `--no-home-patch`, on a ROM
    other than the one below, or without adb root.
-6. **Disables unneeded system apps** listed in [`system-apps.tsv`](system-apps.tsv), using `pm disable`
+7. **Disables unneeded system apps** listed in [`system-apps.tsv`](system-apps.tsv), using `pm disable`
    (reversible, nothing is deleted). Currently:
 
    | Package | Why |
@@ -140,7 +145,7 @@ Examples:
 ./install-watch.sh --addr 192.168.1.50:5555      # first run over Wi-Fi
 ./install-watch.sh --dry-run                     # see what it would do
 ./install-watch.sh --no-disable                  # apps only
-./install-watch.sh --restore                     # re-enable the system apps, original Ticwear home
+./install-watch.sh --restore                     # re-enable the system apps, original Ticwear home, no receiver
 ```
 
 On Windows the same options work (`install-watch.bat --addr 192.168.1.50:5555`).
@@ -287,7 +292,16 @@ Watch"), and:
 * installs such an old app **on the phone** by using the phone's own adb connection with the
   *bypass-low-target-sdk-block* flag (one-time setup: Wireless/USB debugging on, `adb tcpip 5555` once after each
   phone reboot, and accept the "Allow USB debugging?" prompt once);
-* detects apps that embed a watch app (Wear/Ticwear "micro apps") so the watch version syncs through the companion.
+* detects apps that embed a watch app (Wear/Ticwear "micro apps") so the watch version syncs through the companion;
+* when the phone's adb is not reachable (no `adb tcpip 5555` since the last reboot), skips the phone part of such
+  an app and sends its embedded watch app straight to the watch over Bluetooth instead;
+* sends pure watch apps (no phone part) straight to the watch.
+
+Normally the Ticwear companion copies a store app's watch part to the watch by itself — but only after the phone
+part is installed, which Android 14+ blocks for these old apps without adb. Sending over Bluetooth needs the small
+**receiver on the watch** (`org.xzwatch.bridge.watch`, "Install Bridge"): `install-watch` puts it in
+`/system/priv-app` (it needs system rights to install apps). It accepts APKs only from the first phone that sends
+one (trust on first use).
 
 ### Ticwear companion — patched for current Android
 
@@ -395,6 +409,8 @@ For users that means: *run the installer again* — it first runs `git pull` (cl
 
 **To add a new app:** put the APK under `apks/<target>/`, add a row to `manifest.tsv`
 (`target<TAB>package<TAB>file<TAB>md5<TAB>name`, target = `watch` or `phone`), then run `tools/update-manifest.sh`.
+A watch app that needs system rights goes under `apks/watch-system/X.apk` (target `watch-system`); the watch
+installer copies it to `/system/priv-app/X/X.apk` and restarts the watch.
 
 **64-bit-only phones:** when a phone APK contains only 32-bit native libraries (`lib/armeabi-v7a/`), also build its
 variant with `tools/make-arm64-variant.sh KEYSTORE ALIAS apks/phone/X.apk` (same key as `X.apk`). It writes
@@ -417,6 +433,8 @@ Using a fork? The scripts read the repository address from `git remote origin`; 
 | Microphone does nothing / "Mic blocked" | Ticwear has its own permission gate: Settings → Apps → the app → allow Microphone. |
 | Phone: `INSTALL_FAILED_NO_MATCHING_ABIS` | A 64-bit-only phone with an old copy of the installer. Update the folder (`git pull`, or download the ZIP again) and re-run — it then installs the `-arm64` builds. |
 | Swiping right / "OK Tico" still opens Tico | Run `install-watch` again (after a reflash the patch is gone). If it says *skipped: needs adb root*, the watch is not on the userdebug ROM; *not the Tic_4.13.0_intl_a1 one* means a different Ticwear version — see [the home patch](#ticwear-home-patch--voice-launches-open-sonora). The first swipe right after the patch is applied is sometimes ignored; swipe again. |
+| Install on Watch: *Watch did not answer* / cannot connect to the watch | The receiver is missing on the watch (a reflash removes it): run `install-watch`. If it says *skipped: needs adb root*, the watch is not on the userdebug ROM. Bluetooth must be on and the watch paired with the phone. |
+| Install on Watch: *This old app needs the phone's adb* | Run `adb tcpip 5555` once (again after every phone reboot) with the phone on USB, then tap *Try again*. Apps with a built-in watch part go straight to the watch instead when adb is not set up. |
 | Home Assistant setup: `SecurityException … not exported` | The watch has an older Sonora; run `install-watch` to update it, then repeat the `adb shell am start …` command. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | The app on the watch was signed with another key. `--force` replaces it (erases that app's data). |
 | An HTTPS site fails with handshake / certificate errors | Android 5.1's trust store lacks newer roots (ISRG/Let's Encrypt, Google Trust Services, Amazon) and it cannot speak TLS 1.3-only servers. Choose services that still serve TLS 1.2 chained to older roots. |
@@ -437,6 +455,7 @@ ticwatch2-revive/
 ├── system-apps.tsv                     system apps the watch installer disables
 ├── apks/
 │   ├── watch/   sonora-watch.apk  watch-maps.apk
+│   ├── watch-system/  XzBridge.apk   (Install on Watch receiver, goes to /system/priv-app)
 │   └── phone/   ticwear-companion-a16.apk  mobvoi-store-a16.apk  phone-bridge.apk
 │                (+ *-arm64.apk: the same two Mobvoi apps for 64-bit-only phones)
 ├── patches/
@@ -469,8 +488,9 @@ signed with a second key (`CN=companion-a16`) because Mobvoi's original signing 
 |---|---|
 | `install-watch.sh` — install, update, online sync, disable, `--restore` | on a real Ticwatch 2 from macOS |
 | Ticwear home patch via `install-watch.sh` — apply, re-run, `--restore`, re-apply | on a real Ticwatch 2 (Tic_4.13.0_intl_a1): swipe right opens Sonora |
+| Install on Watch receiver via `install-watch.sh` — install, re-run, remove, restart + check | on a real Ticwatch 2 (2026-11-09) |
 | `install-watch.sh` / `install-phone.sh` on Linux | against a simulated adb device (Ubuntu) |
-| `install-watch.ps1` / `install-phone.ps1` on Windows | with PowerShell 7 against a simulated adb device — not yet on a real Windows PC (home patch: logic tested against a simulated watch only) |
+| `install-watch.ps1` / `install-phone.ps1` on Windows | with PowerShell 7 against a simulated adb device — not yet on a real Windows PC (home patch and receiver: logic tested against a simulated watch only) |
 | `install-phone.sh` on a real phone | macOS → 64-bit-only Android 16 phone (Snapdragon SM7550): arm64 builds install and start |
 | Flashing section | written from the stock recovery's behaviour; follow it carefully and report problems |
 

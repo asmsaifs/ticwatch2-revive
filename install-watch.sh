@@ -18,7 +18,8 @@ are left alone.
   --addr IP:PORT   connect to the watch over Wi-Fi first (e.g. 192.168.1.50:5555)
   --no-disable     only install/update the apps, do not touch system apps
   --no-home-patch  do not patch Ticwear home (voice launches then keep opening Tico)
-  --restore        undo: re-enable the disabled system apps and put the original Ticwear home back
+  --restore        undo: re-enable the disabled system apps, put the original Ticwear home back
+                   and remove the Install on Watch receiver (restarts the watch)
   --force          if an app is installed with a different signing key, uninstall it first
                    (erases that app's data)
   --offline        do not look for newer files online (no git pull / download)
@@ -69,12 +70,18 @@ if [ "$RESTORE" = 1 ]; then
   apply_sysapps "$WATCH" enable
   step "Putting the original Ticwear home back"
   home_patch "$WATCH" restore
+  step "Removing the Install on Watch receiver"
+  sysapps "$WATCH" remove
+  [ "$SYS_REBOOT" = 1 ] && reboot_watch "$WATCH"
   say; say "Done."; exit 0
 fi
 
 step "Installing apps"
 RC=0
 install_target "$WATCH" watch || RC=1
+
+step "Install on Watch receiver (system app)"
+sysapps "$WATCH" install || RC=1
 
 if [ "$NO_HOME" = 0 ]; then
   step "Voice button → Sonora (Ticwear home patch)"
@@ -84,6 +91,11 @@ fi
 if [ "$NO_DISABLE" = 0 ]; then
   step "Disabling unneeded system apps"
   apply_sysapps "$WATCH" disable
+fi
+
+if [ "$SYS_REBOOT" = 1 ]; then
+  step "Restarting the watch so the system app starts"
+  if reboot_watch "$WATCH"; then check_sysapps "$WATCH" || RC=1; else RC=1; fi
 fi
 
 step "Finished"
