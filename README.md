@@ -204,7 +204,8 @@ The phone and the watch are told apart automatically, so both can be plugged in 
   Search uses Google Places when a key is set, OpenStreetMap Nominatim otherwise.
 * **Nearby:** one-tap category chips on the search screen — Food, Cafe, ATM, Fuel, Pharmacy, Hospital, Mosque,
   Grocery, Hotel — list places around you, nearest first (Google Places nearby search with a key, Nominatim without).
-* **Saved places:** star a place from its screen or long-press a search result. The *Saved* chip opens your list
+* **Saved places:** star a place from its screen or long-press a search result. A dropped pin asks what to call it —
+  *Home*, *Work* or a name you type — and Home/Work get their own house/briefcase icons. The *Saved* chip opens your list
   (nearest first; tap to show on the map, long-press to remove, with undo), and saved places appear on the map as
   small amber stars.
 * **Uncluttered map:** the on-map buttons fade out after a few seconds; tap the map to bring them back.
